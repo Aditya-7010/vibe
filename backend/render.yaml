@@ -1,0 +1,23 @@
+# Infrastructure-as-code for Render. Pushing this file to GitHub and clicking
+# "New > Blueprint" wires up the service; every later `git push` redeploys.
+services:
+  - type: web
+    name: vibe-api
+    runtime: python
+    plan: free
+    buildCommand: "./backend/build.sh"
+    startCommand: "cd backend && daphne -b 0.0.0.0 -p $PORT config.asgi:application"
+    healthCheckPath: /api/health/
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "false"
+      - key: FRONTEND_URL
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: DATABASE_URL
+        sync: false

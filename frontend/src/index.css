@@ -1,0 +1,503 @@
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700;12..96,800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import 'tailwindcss';
+
+/* ------------------------------------------------------------------ *
+ * Type
+ *
+ * Bricolage Grotesque for headings — it has a bit of wonk to it, which
+ * reads as "made by someone" rather than "shipped by a template". Plus
+ * Jakarta Sans carries the body text: tall x-height, very legible at the
+ * small sizes the chat and queue panels use.
+ * ------------------------------------------------------------------ */
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+  --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-display: 'Bricolage Grotesque', 'Plus Jakarta Sans', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+:root {
+  --font-head: 'Bricolage Grotesque', 'Plus Jakarta Sans', sans-serif;
+  --font-body: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-code: 'IBM Plex Mono', ui-monospace, monospace;
+
+  --background: #0a0a10;
+  --foreground: #eceaf5;
+  --card: #13131c;
+  --card-foreground: #eceaf5;
+  --primary: #8b5cf6;
+  --primary-foreground: #ffffff;
+  --secondary: #1c1c29;
+  --secondary-foreground: #c8c5dc;
+  --muted: #181824;
+  --muted-foreground: #8c89a8;
+  --accent: #22d3ee;
+  --accent-foreground: #04222a;
+  --border: rgba(255, 255, 255, 0.09);
+  --ring: #8b5cf6;
+  --radius: 14px;
+
+  /* Surfaces are flat in dark/light and beveled in skeu; components read
+     these instead of hard-coding a shadow. */
+  --elev-1: 0 2px 10px rgba(0, 0, 0, 0.35);
+  --elev-2: 0 12px 40px rgba(0, 0, 0, 0.45);
+  --inset: none;
+  --panel-texture: none;
+
+  color-scheme: dark;
+}
+
+.light {
+  --background: #f7f6fb;
+  --foreground: #14131c;
+  --card: #ffffff;
+  --card-foreground: #14131c;
+  --primary: #6d28d9;
+  --primary-foreground: #ffffff;
+  --secondary: #eeebf8;
+  --secondary-foreground: #3f2d75;
+  --muted: #f2f0f9;
+  --muted-foreground: #6a6784;
+  --accent: #0891b2;
+  --accent-foreground: #ffffff;
+  --border: rgba(20, 19, 28, 0.11);
+  --ring: #6d28d9;
+  --elev-1: 0 2px 10px rgba(30, 25, 60, 0.07);
+  --elev-2: 0 14px 40px rgba(30, 25, 60, 0.12);
+  color-scheme: light;
+}
+
+/* ------------------------------------------------------------------ *
+ * Skeuomorphic theme
+ *
+ * Warm paper and brushed metal: raised controls with a lit top edge and
+ * a real drop shadow, recessed inputs, a little grain on the panels.
+ * Every surface is either pushed out of the page or pressed into it.
+ * ------------------------------------------------------------------ */
+
+.skeu {
+  --background: #cfc6b4;
+  --foreground: #2c2418;
+  --card: #ece4d4;
+  --card-foreground: #2c2418;
+  --primary: #6b4fa8;
+  --primary-foreground: #fdfbf6;
+  --secondary: #ddd4c0;
+  --secondary-foreground: #4a3c26;
+  --muted: #e2d9c6;
+  --muted-foreground: #7c6e58;
+  --accent: #2b7f96;
+  --accent-foreground: #fdfbf6;
+  --border: rgba(84, 66, 40, 0.3);
+  --ring: #6b4fa8;
+  --radius: 12px;
+  --elev-1: 0 2px 3px rgba(60, 44, 22, 0.28), 0 6px 14px rgba(60, 44, 22, 0.18);
+  --elev-2: 0 4px 6px rgba(60, 44, 22, 0.3), 0 18px 36px rgba(60, 44, 22, 0.26);
+  --inset: inset 0 2px 5px rgba(70, 52, 28, 0.35), inset 0 -1px 0 rgba(255, 252, 244, 0.6);
+  color-scheme: light;
+}
+
+.skeu body {
+  background-color: #cfc6b4;
+  background-image:
+    radial-gradient(circle at 18% 10%, rgba(255, 252, 240, 0.65), transparent 45%),
+    radial-gradient(circle at 82% 88%, rgba(120, 92, 54, 0.22), transparent 50%),
+    repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.05) 0 2px, rgba(120, 92, 54, 0.045) 2px 4px);
+}
+
+.skeu .rounded-2xl,
+.skeu .rounded-xl {
+  background-image: linear-gradient(180deg, rgba(255, 253, 246, 0.6), rgba(255, 253, 246, 0) 55%);
+}
+
+/* ------------------------------------------------------------------ */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-body);
+  font-feature-settings: 'ss01' 1, 'cv01' 1;
+  -webkit-font-smoothing: antialiased;
+  transition: background-color 0.3s ease, color 0.3s ease;
+  margin: 0;
+  padding: 0;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-head);
+  letter-spacing: -0.015em;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--primary) 45%, transparent);
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+* { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--primary) 45%, transparent) transparent; }
+
+/* ------------------------------------------------------------------ *
+ * Animation
+ * ------------------------------------------------------------------ */
+
+@keyframes bop {
+  0%, 100% { transform: translateY(0); }
+  25% { transform: translateY(-9px) rotate(-2deg); }
+  75% { transform: translateY(-4px) rotate(2deg); }
+}
+@keyframes idleSway {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-3px) rotate(1deg); }
+}
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(6px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes fadeOutUp {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(-10px) scale(0.9); }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+@keyframes spinSlow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes livePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.avatar-bop { animation: bop 0.62s ease-in-out infinite; transform-origin: 50% 90%; }
+.avatar-idle { animation: idleSway 4.5s ease-in-out infinite; transform-origin: 50% 90%; }
+.bubble-enter { animation: fadeInUp 0.2s ease forwards; }
+.bubble-exit { animation: fadeOutUp 0.3s ease forwards; }
+.page-transition { animation: fadeInUp 0.3s ease forwards; }
+.chat-message { animation: fadeInUp 0.18s ease forwards; }
+.spin-slow { animation: spinSlow 9s linear infinite; }
+.live-pulse { animation: livePulse 1.6s ease-in-out infinite; }
+
+/* ------------------------------------------------------------------ *
+ * Controls
+ * ------------------------------------------------------------------ */
+
+.gradient-text {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.hero-glow {
+  background: radial-gradient(ellipse 80% 50% at 50% -20%, color-mix(in srgb, var(--primary) 28%, transparent) 0%, transparent 60%);
+}
+
+.card-hover { transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease; }
+.card-hover:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--elev-2);
+  border-color: color-mix(in srgb, var(--primary) 40%, transparent);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 75%, #000));
+  color: var(--primary-foreground);
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.12s, box-shadow 0.15s;
+  font-family: var(--font-body);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.btn-primary:hover { opacity: 0.94; transform: translateY(-1px); box-shadow: var(--elev-1); }
+.btn-primary:active { transform: translateY(0); }
+.btn-primary:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--foreground);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  font-family: var(--font-body);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+.btn-ghost:hover { background: var(--muted); border-color: color-mix(in srgb, var(--primary) 35%, transparent); }
+.btn-ghost:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+.icon-btn:hover { color: var(--foreground); background: var(--muted); }
+.icon-btn.is-active { color: var(--primary); background: color-mix(in srgb, var(--primary) 14%, transparent); }
+
+.input-field {
+  background: var(--secondary);
+  border: 1px solid var(--border);
+  color: var(--foreground);
+  font-family: var(--font-body);
+  transition: border-color 0.15s, box-shadow 0.15s;
+  outline: none;
+}
+.input-field:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+.input-field::placeholder { color: var(--muted-foreground); }
+
+/* Skeuomorphic overrides: real bevels rather than flat fills. */
+.skeu .btn-primary {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--primary) 78%, #fff) 0%, var(--primary) 45%, color-mix(in srgb, var(--primary) 72%, #000) 100%);
+  border: 1px solid color-mix(in srgb, var(--primary) 60%, #000);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), var(--elev-1);
+  text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.3);
+}
+.skeu .btn-primary:active {
+  box-shadow: inset 0 3px 6px rgba(0, 0, 0, 0.4);
+  transform: translateY(1px);
+}
+.skeu .btn-ghost {
+  background: linear-gradient(180deg, #f7f1e4, #ddd2ba);
+  border: 1px solid rgba(84, 66, 40, 0.38);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 2px 3px rgba(70, 52, 28, 0.22);
+}
+.skeu .btn-ghost:active { box-shadow: inset 0 2px 5px rgba(70, 52, 28, 0.35); transform: translateY(1px); }
+.skeu .input-field { background: #f5efe2; box-shadow: var(--inset); border-color: rgba(84, 66, 40, 0.35); }
+.skeu .icon-btn:hover { background: rgba(255, 253, 246, 0.6); }
+
+/* ------------------------------------------------------------------ *
+ * Room
+ * ------------------------------------------------------------------ */
+
+.title-bar {
+  background: color-mix(in srgb, var(--background) 88%, transparent);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+}
+.bottom-bar {
+  background: color-mix(in srgb, var(--card) 92%, transparent);
+  backdrop-filter: blur(14px);
+  border-top: 1px solid var(--border);
+}
+.room-sidebar { background: var(--card); border-left: 1px solid var(--border); }
+.skeu .room-sidebar { box-shadow: inset 3px 0 8px rgba(70, 52, 28, 0.18); }
+
+/**
+ * The stage: the backdrop the avatars and the player sit on. Each theme
+ * gets its own scene rather than the same grid recoloured — a night club
+ * wash for dark, a bright sunlit hall for light, and a wood-and-felt
+ * listening room for skeuomorphic.
+ */
+.room-stage {
+  position: relative;
+  background-color: #0b0a14;
+  background-image:
+    radial-gradient(ellipse 70% 55% at 50% 0%, rgba(139, 92, 246, 0.3), transparent 62%),
+    radial-gradient(ellipse 45% 40% at 12% 85%, rgba(34, 211, 238, 0.2), transparent 60%),
+    radial-gradient(ellipse 45% 40% at 88% 80%, rgba(236, 72, 153, 0.16), transparent 60%),
+    linear-gradient(180deg, #14122a 0%, #0b0a14 60%, #07060d 100%);
+}
+.room-stage::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 42%;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, transparent, rgba(139, 92, 246, 0.12)),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 64px);
+  mask-image: linear-gradient(180deg, transparent, #000 70%);
+}
+
+.light .room-stage {
+  background-color: #eef0fb;
+  background-image:
+    radial-gradient(ellipse 65% 50% at 50% -5%, rgba(255, 233, 186, 0.9), transparent 60%),
+    radial-gradient(ellipse 50% 45% at 85% 90%, rgba(167, 139, 250, 0.28), transparent 62%),
+    radial-gradient(ellipse 50% 45% at 10% 95%, rgba(125, 211, 252, 0.3), transparent 62%),
+    linear-gradient(180deg, #fdfbff 0%, #eef0fb 55%, #e2e5f6 100%);
+}
+.light .room-stage::after {
+  background:
+    linear-gradient(180deg, transparent, rgba(109, 40, 217, 0.08)),
+    repeating-linear-gradient(90deg, rgba(20, 19, 28, 0.05) 0 1px, transparent 1px 64px);
+}
+
+.skeu .room-stage {
+  background-color: #6b4a2c;
+  background-image:
+    radial-gradient(ellipse 60% 45% at 50% 4%, rgba(255, 226, 160, 0.42), transparent 58%),
+    repeating-linear-gradient(92deg, rgba(0, 0, 0, 0.14) 0 3px, rgba(255, 255, 255, 0.05) 3px 9px),
+    linear-gradient(180deg, #8a6038 0%, #6b4a2c 58%, #4a3220 100%);
+  box-shadow: inset 0 0 90px rgba(40, 24, 10, 0.6);
+}
+.skeu .room-stage::after {
+  height: 34%;
+  background: linear-gradient(180deg, transparent, rgba(30, 18, 8, 0.45));
+  mask-image: none;
+}
+
+/** The player is sized to the video, never stretched across the room. */
+.player-shell {
+  width: 100%;
+  max-width: 760px;
+  aspect-ratio: 16 / 9;
+  border-radius: 16px;
+  overflow: hidden;
+  position: relative;
+  background: #000;
+  box-shadow: var(--elev-2), 0 0 0 1px var(--border);
+}
+.skeu .player-shell {
+  border-radius: 10px;
+  border: 6px solid #3a2a18;
+  box-shadow: inset 0 0 0 2px rgba(255, 240, 210, 0.15), var(--elev-2);
+}
+.player-shell iframe { width: 100%; height: 100%; border: 0; display: block; }
+
+/** Sits over the iframe so nobody can reach YouTube's own controls. */
+.player-guard {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  cursor: default;
+}
+
+.progress-track {
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--foreground) 14%, transparent);
+  overflow: hidden;
+}
+.skeu .progress-track { box-shadow: var(--inset); background: #bdb09a; }
+.progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--primary), var(--accent));
+  transition: width 0.4s linear;
+}
+
+.stage-avatar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  user-select: none;
+}
+
+.speech-bubble {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px 14px 14px 3px;
+  padding: 6px 11px;
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: var(--elev-1);
+  margin-bottom: 6px;
+  pointer-events: none;
+}
+
+.avatar-popup {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+  min-width: 150px;
+  box-shadow: var(--elev-2);
+  z-index: 50;
+  animation: fadeInUp 0.15s ease forwards;
+}
+
+.dj-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--secondary);
+}
+.dj-row.is-current {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+}
+.dj-row.is-dragging { opacity: 0.45; }
+
+.queue-drag-handle { cursor: grab; touch-action: none; }
+.queue-drag-handle:active { cursor: grabbing; }
+
+.tab-active { color: var(--primary); border-bottom: 2px solid var(--primary); }
+.tab-inactive { color: var(--muted-foreground); border-bottom: 2px solid transparent; }
+.tab-inactive:hover { color: var(--foreground); }
+
+.gif-result { transition: transform 0.15s, opacity 0.15s; cursor: pointer; }
+.gif-result:hover { transform: scale(1.04); opacity: 0.92; }
+
+.room-art-overlay {
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.82) 0%, rgba(0, 0, 0, 0.18) 58%, transparent 100%);
+}
+
+.draggable-sidebar { position: fixed; z-index: 100; touch-action: none; user-select: none; }
+
+.status-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.status-dot.online { background: #4ade80; box-shadow: 0 0 8px rgba(74, 222, 128, 0.6); }
+.status-dot.offline { background: #f87171; }
+
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Toggled by the Accessibility > Animations setting. */
+.no-animations *,
+.no-animations *::before,
+.no-animations *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+}
