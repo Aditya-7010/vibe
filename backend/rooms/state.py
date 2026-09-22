@@ -91,6 +91,17 @@ def serialize_message(message: Message, user=None, reactions=None):
             grouped.setdefault(reaction.emoji, []).append(str(reaction.user_id))
     else:
         grouped = reactions
+    reply_to = None
+    if message.reply_to_id:
+        parent = message.reply_to
+        reply_to = {
+            "id": str(parent.id),
+            "username": parent.author_name,
+            "text": "message deleted" if parent.deleted else (
+                parent.text[:80] if parent.kind == "text" else "GIF"
+            ),
+            "deleted": parent.deleted,
+        }
     return {
         "id": str(message.id),
         "userId": str(message.user_id) if message.user_id else "",
@@ -103,6 +114,7 @@ def serialize_message(message: Message, user=None, reactions=None):
         "edited": bool(message.edited_at),
         "deleted": message.deleted,
         "reactions": grouped,
+        "replyTo": reply_to,
         "canEdit": message.can_edit(user) and not message.deleted,
         "canDelete": message.can_delete(user) and not message.deleted,
     }
@@ -184,6 +196,7 @@ def full_room_state(room: Room, user=None, message_limit=60):
     user_id = getattr(user, "id", None)
     messages = list(
         room.messages.order_by("-created_at")
+        .select_related("reply_to")
         .prefetch_related("reactions")[:message_limit]
     )
     messages.reverse()

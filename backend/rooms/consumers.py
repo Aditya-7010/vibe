@@ -81,6 +81,16 @@ class RoomConsumer(AsyncJsonWebsocketConsumer):
                 await self.group_broadcast(
                     {"type": "djs", "payload": await self.get_djs()}
                 )
+                # If it was this person's track playing, don't wait for the
+                # next tick — stop it (or hand off) right away.
+                changed, playback = await self.advance_playback()
+                if changed:
+                    await self.group_broadcast(
+                        {"type": "playback", "payload": playback}
+                    )
+                    await self.group_broadcast(
+                        {"type": "queue", "payload": await self.get_queue()}
+                    )
 
     async def tick_loop(self):
         counter = 0
@@ -167,7 +177,7 @@ class RoomConsumer(AsyncJsonWebsocketConsumer):
         gif_url = (payload.get("gifUrl") or "").strip()[:600]
         if kind == "text" and not text:
             return
-        message = await self.create_message(kind, text, gif_url)
+        message = await self.create_message(kind, text, gif_url, payload.get("replyTo"))
         await self.group_broadcast({"type": "chat", "payload": message})
         if kind == "text":
             await self.group_broadcast(
@@ -365,8 +375,13 @@ class RoomConsumer(AsyncJsonWebsocketConsumer):
         return bool(room and room.can_moderate(self.user))
 
     @database_sync_to_async
-    def create_message(self, kind, text, gif_url):
+    def create_message(self, kind, text, gif_url, reply_to_id=None):
         room = Room.objects.get(pk=self.room_id)
+        reply_to = None
+        if reply_to_id:
+            reply_to = Message.objects.filter(
+                pk=reply_to_id, room_id=self.room_id, deleted=False
+            ).first()
         message = Message.objects.create(
             room=room,
             user=self.user,
@@ -375,6 +390,7 @@ class RoomConsumer(AsyncJsonWebsocketConsumer):
             kind=kind,
             text=text,
             gif_url=gif_url,
+            reply_to=reply_to,
         )
         return serialize_message(message, reactions={})
 

@@ -143,7 +143,7 @@ def room_messages(request, room_id):
         return Response({"detail": "Room not found."}, status=status.HTTP_404_NOT_FOUND)
     limit = min(int(request.query_params.get("limit", 60)), 200)
     messages = list(
-        room.messages.order_by("-created_at").prefetch_related("reactions")[:limit]
+        room.messages.order_by("-created_at").select_related("reply_to").prefetch_related("reactions")[:limit]
     )
     messages.reverse()
     return Response(
@@ -235,6 +235,7 @@ def song_feedback(request):
                         "videoId": item.video_id,
                         "title": item.title,
                         "thumbnail": item.thumbnail,
+                        "duration": item.duration,
                         "kind": item.kind,
                         "createdAt": int(item.created_at.timestamp() * 1000),
                     }
@@ -271,6 +272,7 @@ def song_feedback(request):
         video_id=video_id,
         title=(request.data.get("title") or "")[:200],
         thumbnail=request.data.get("thumbnail") or "",
+        duration=int(request.data.get("duration") or 0),
         kind=kind,
     )
     return Response({"videoId": video_id, "kind": kind, "active": True})

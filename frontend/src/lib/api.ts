@@ -170,6 +170,7 @@ export const feedbackApi = {
     roomId?: string;
     title?: string;
     thumbnail?: string;
+    duration?: number;
   }) => api.post('/feedback/', payload),
   saved: () => api.get('/feedback/?kind=save'),
 };

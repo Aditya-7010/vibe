@@ -136,6 +136,13 @@ class Message(models.Model):
     kind = models.CharField(max_length=8, choices=KINDS, default="text")
     text = models.TextField(max_length=280, blank=True, default="")
     gif_url = models.URLField(max_length=600, blank=True, default="")
+    reply_to = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="replies",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     edited_at = models.DateTimeField(null=True, blank=True)
     deleted = models.BooleanField(default=False)
@@ -257,14 +264,9 @@ class Playback(models.Model):
         self.revision += 1
 
     # -- queue progression --------------------------------------------------
-    def next_item(self):
-        """Next track ignoring the DJ line — used when nobody has joined it."""
-        return (
-            self.room.queue_items.filter(played=False)
-            .exclude(pk=self.item_id)
-            .order_by("position", "created_at")
-            .first()
-        )
+    def _live_dj_ids(self):
+        """Users who are both physically in the room right now."""
+        return set(self.room.live_presences().values_list("user_id", flat=True))
 
     def _rotate_line(self, after_user_id):
         """Send the DJ who just played to the back and return the line."""
@@ -280,15 +282,23 @@ class Playback(models.Model):
                 slot.save(update_fields=["position"])
         return slots
 
-    def pick_next(self, after_user_id=None):
+    def pick_next(self, after_user_id=None, live_ids=None):
         """
-        Choose what plays next.
+        Choose what plays next — strictly from the DJ line.
 
-        With a DJ line, the decks pass to the next person in it who has a
-        track queued. With an empty line it's just the room queue in order.
+        Nobody gets a song just for being in the room: you have to join the
+        line, and it has to be your turn. A DJ who isn't currently present is
+        skipped without losing their spot, so they pick back up if they
+        return before their next turn comes round. If nobody in the line has
+        anything queued, playback stays silent rather than reaching into the
+        room's queue at large.
         """
+        if live_ids is None:
+            live_ids = self._live_dj_ids()
         slots = self._rotate_line(after_user_id)
         for slot in slots:
+            if slot.user_id not in live_ids:
+                continue
             item = (
                 self.room.queue_items.filter(played=False, added_by_id=slot.user_id)
                 .exclude(pk=self.item_id)
@@ -297,45 +307,62 @@ class Playback(models.Model):
             )
             if item is not None:
                 return item, slot.user
-        item = self.next_item()
-        return (item, item.added_by if item else None)
+        return None, None
 
-    def advance(self):
-        """Finish the current track and hand over to the next DJ."""
+    def _go_silent(self):
+        self.item = None
+        self.dj = None
+        self.is_playing = False
+        self.paused_position = 0
+        self.revision += 1
+
+    def advance(self, live_ids=None):
+        """Finish the current track and hand over to the next present DJ."""
         previous_dj = self.dj_id
         if self.item_id is not None:
             QueueItem.objects.filter(pk=self.item_id).update(played=True)
-        item, dj = self.pick_next(after_user_id=previous_dj)
+        item, dj = self.pick_next(after_user_id=previous_dj, live_ids=live_ids)
         if item is not None:
             self.dj = dj
             self.start(item, 0)
-        elif self.item_id is not None:
-            # Nothing queued by anyone: loop the current track so the room
-            # is never silent.
-            self.start(self.item, 0)
         else:
-            self.is_playing = False
-            self.revision += 1
+            self._go_silent()
         return self.item
 
     def ensure_current(self):
         """
-        Lazily keep the clock honest: pick up a song if idle, and roll over to
-        the next one once the current track has run past its duration.
+        Lazily keep the clock honest against who's actually in the room:
+
+        - Nobody here at all -> stop and clear the deck.
+        - Whoever's track is playing has left -> stop it and hand off to the
+          next present DJ, same as if their track had ended.
+        - Idle with someone in the line -> start their track.
+        - Track has simply run past its duration -> advance as usual.
+
         Returns True when something changed.
         """
+        live_ids = self._live_dj_ids()
         changed = False
-        if self.item_id is None:
-            item, dj = self.pick_next()
+
+        if not live_ids:
+            if self.item_id is not None or self.is_playing:
+                self._go_silent()
+                changed = True
+        elif self.item_id is None:
+            item, dj = self.pick_next(live_ids=live_ids)
             if item is not None:
                 self.dj = dj
                 self.start(item, 0)
                 changed = True
+        elif self.dj_id and self.dj_id not in live_ids:
+            self.advance(live_ids=live_ids)
+            changed = True
         elif self.is_playing:
             duration = self.item.duration or 0
             if duration and self.position() >= duration:
-                self.advance()
+                self.advance(live_ids=live_ids)
                 changed = True
+
         if changed:
             self.save()
         return changed
@@ -353,6 +380,7 @@ class SongFeedback(models.Model):
     video_id = models.CharField(max_length=32)
     title = models.CharField(max_length=200, blank=True, default="")
     thumbnail = models.URLField(max_length=600, blank=True, default="")
+    duration = models.PositiveIntegerField(default=0, help_text="seconds")
     kind = models.CharField(max_length=8, choices=KINDS)
     created_at = models.DateTimeField(auto_now_add=True)
 

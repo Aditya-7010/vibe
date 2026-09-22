@@ -112,6 +112,11 @@ export default function Room() {
     likedSongs,
     dislikedSongs,
     savedSongs,
+    favorites,
+    favoritesLoaded,
+    loadFavorites,
+    addFavoriteToQueue,
+    removeFavorite,
   } = useStore();
 
   const currentSong = playback.current;
@@ -119,6 +124,10 @@ export default function Room() {
   const canModerate = !!currentRoom?.canModerate;
   const inLine = djs.some((d) => d.id === user?.id);
   const myTurn = playback.djId && playback.djId === user?.id;
+
+  useEffect(() => {
+    if (!favoritesLoaded) loadFavorites();
+  }, [favoritesLoaded, loadFavorites]);
 
   /* ---------------------------------------------------------------- */
   /* Join / leave                                                      */
@@ -324,9 +333,14 @@ export default function Room() {
         </button>
       </header>
 
-      <div className="flex-1 flex min-h-0">
+      <div className={`flex-1 flex min-h-0 ${isMobile ? 'flex-col' : 'flex-row'}`}>
         {/* ---------------- stage ---------------- */}
-        <main className="room-stage flex-1 flex flex-col min-w-0 relative">
+        <main
+          className={`room-stage flex flex-col min-w-0 relative ${
+            isMobile && panel ? 'flex-none' : 'flex-1'
+          }`}
+          style={isMobile && panel ? { height: '38vh' } : undefined}
+        >
           <div className="relative z-10 flex-1 flex flex-col items-center justify-center gap-6 px-4 py-6 overflow-y-auto">
             {/* Player — sized to the video, not stretched across the room. */}
             <div className="w-full flex flex-col items-center gap-3">
@@ -373,33 +387,39 @@ export default function Room() {
               </div>
             </div>
 
-            {/* Avatars */}
-            <div className="w-full flex items-end justify-center gap-4 md:gap-8 flex-wrap pt-2">
-              {roomAvatars.length === 0 && (
-                <p className="text-sm" style={{ color: 'rgba(255,255,255,0.65)' }}>Nobody else here yet.</p>
-              )}
-              {roomAvatars.map((avatar) => (
-                <StageAvatar
-                  key={avatar.id}
-                  avatar={avatar}
-                  bubble={bubblesEnabled ? bubbleMessages[avatar.id]?.text : undefined}
-                  bubbleExiting={bubbleMessages[avatar.id]?.exiting}
-                  isFriend={friends.includes(avatar.id)}
-                  isDj={playback.djId === avatar.id}
-                  onAddFriend={() => addFriend(avatar.id)}
-                  onRemoveFriend={() => removeFriend(avatar.id)}
-                />
-              ))}
-            </div>
+            {/* Avatars — hidden while the chat/queue panel is open on mobile,
+                since the stage has been squeezed down to just the player. */}
+            {!(isMobile && panel) && (
+              <div className="w-full flex items-end justify-center gap-4 md:gap-8 flex-wrap pt-2">
+                {roomAvatars.length === 0 && (
+                  <p className="text-sm" style={{ color: 'rgba(255,255,255,0.65)' }}>Nobody else here yet.</p>
+                )}
+                {roomAvatars.map((avatar) => (
+                  <StageAvatar
+                    key={avatar.id}
+                    avatar={avatar}
+                    bubble={bubblesEnabled ? bubbleMessages[avatar.id]?.text : undefined}
+                    bubbleExiting={bubbleMessages[avatar.id]?.exiting}
+                    isFriend={friends.includes(avatar.id)}
+                    isDj={playback.djId === avatar.id}
+                    size={isMobile ? 76 : 108}
+                    onAddFriend={() => addFriend(avatar.id)}
+                    onRemoveFriend={() => removeFriend(avatar.id)}
+                  />
+                ))}
+              </div>
+            )}
           </div>
 
-          <button
-            onClick={() => setBubblesEnabled(!bubblesEnabled)}
-            className="absolute top-3 right-3 z-20 btn-ghost px-3 py-1.5 rounded-xl text-xs"
-            title="Toggle bubble chat"
-          >
-            <Icon.Chat size={14} /> Bubbles {bubblesEnabled ? 'on' : 'off'}
-          </button>
+          {!(isMobile && panel) && (
+            <button
+              onClick={() => setBubblesEnabled(!bubblesEnabled)}
+              className="absolute top-3 right-3 z-20 btn-ghost px-3 py-1.5 rounded-xl text-xs"
+              title="Toggle bubble chat"
+            >
+              <Icon.Chat size={14} /> Bubbles {bubblesEnabled ? 'on' : 'off'}
+            </button>
+          )}
         </main>
 
         {/* ---------------- side panel ---------------- */}
@@ -407,7 +427,7 @@ export default function Room() {
           <aside
             className={
               isMobile
-                ? 'fixed inset-0 z-40 flex flex-col room-sidebar'
+                ? 'flex-1 min-h-0 flex flex-col room-sidebar'
                 : 'room-sidebar w-[360px] flex-shrink-0 flex flex-col'
             }
           >
@@ -439,6 +459,9 @@ export default function Room() {
                 onLeaveLine={leaveLine}
                 onKick={kickFromLine}
                 onReorderLine={reorderLine}
+                favorites={favorites}
+                onAddFavoriteToQueue={addFavoriteToQueue}
+                onRemoveFavorite={removeFavorite}
               />
             )}
           </aside>
@@ -497,6 +520,7 @@ function StageAvatar({
   bubbleExiting,
   isFriend,
   isDj,
+  size = 108,
   onAddFriend,
   onRemoveFriend,
 }: {
@@ -505,6 +529,7 @@ function StageAvatar({
   bubbleExiting?: boolean;
   isFriend: boolean;
   isDj: boolean;
+  size?: number;
   onAddFriend: () => void;
   onRemoveFriend: () => void;
 }) {
@@ -541,7 +566,7 @@ function StageAvatar({
       >
         <AvatarSprite
           skin={avatar.avatarSkin}
-          size={140}
+          size={size}
           expression={avatar.expression}
           showBop={avatar.expression === 'bop'}
         />
@@ -577,7 +602,7 @@ function ChatPanel({
   messages: any[];
   meId: string;
   canModerate: boolean;
-  onSend: (text: string, type?: 'text' | 'gif', gifUrl?: string) => void;
+  onSend: (text: string, type?: 'text' | 'gif', gifUrl?: string, replyTo?: string | null) => void;
   onEdit: (id: string, text: string) => void;
   onDelete: (id: string) => void;
   onReact: (id: string, emoji: string) => void;
@@ -585,6 +610,7 @@ function ChatPanel({
   const [draft, setDraft] = useState('');
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [replyingTo, setReplyingTo] = useState<any | null>(null);
   const [showGifs, setShowGifs] = useState(false);
   const endRef = useRef<HTMLDivElement | null>(null);
   const pressTimer = useRef<any>(null);
@@ -600,7 +626,8 @@ function ChatPanel({
       onEdit(editingId, text);
       setEditingId(null);
     } else {
-      onSend(text);
+      onSend(text, 'text', undefined, replyingTo?.id || null);
+      setReplyingTo(null);
     }
     setDraft('');
   };
@@ -643,6 +670,18 @@ function ChatPanel({
                   )}
                 </div>
 
+                {m.replyTo && (
+                  <div
+                    className="flex items-center gap-1.5 mt-1 mb-0.5 pl-2 text-[11px] truncate"
+                    style={{ borderLeft: '2px solid var(--border)', color: 'var(--muted-foreground)' }}
+                  >
+                    <span className="font-semibold flex-shrink-0">{m.replyTo.username}:</span>
+                    <span className="truncate" style={{ fontStyle: m.replyTo.deleted ? 'italic' : undefined }}>
+                      {m.replyTo.text}
+                    </span>
+                  </div>
+                )}
+
                 {m.deleted ? (
                   <p className="text-xs italic" style={{ color: 'var(--muted-foreground)' }}>message deleted</p>
                 ) : m.type === 'gif' ? (
@@ -672,9 +711,11 @@ function ChatPanel({
                 )}
               </div>
 
+              {/* Always tappable — hover-only chrome doesn't exist on a phone. */}
               <button
                 onClick={() => setMenuFor(menuFor === m.id ? null : m.id)}
-                className="icon-btn w-7 h-7 opacity-0 group-hover:opacity-100 flex-shrink-0"
+                className="icon-btn w-7 h-7 flex-shrink-0"
+                style={{ opacity: 0.65 }}
                 aria-label="Message actions"
               >
                 <Icon.Dots size={14} />
@@ -697,9 +738,17 @@ function ChatPanel({
                       </button>
                     ))}
                   </div>
+                  {!m.deleted && (
+                    <button
+                      onClick={() => { setReplyingTo(m); setEditingId(null); setMenuFor(null); }}
+                      className="btn-ghost w-full px-2 py-1.5 rounded-lg text-xs mb-1 justify-start"
+                    >
+                      <Icon.ArrowLeft size={13} style={{ transform: 'scaleX(-1)' }} /> Reply
+                    </button>
+                  )}
                   {canEdit && m.type === 'text' && !m.deleted && (
                     <button
-                      onClick={() => { setEditingId(m.id); setDraft(m.text); setMenuFor(null); }}
+                      onClick={() => { setEditingId(m.id); setDraft(m.text); setReplyingTo(null); setMenuFor(null); }}
                       className="btn-ghost w-full px-2 py-1.5 rounded-lg text-xs mb-1 justify-start"
                     >
                       <Icon.Edit size={13} /> Edit
@@ -727,9 +776,22 @@ function ChatPanel({
 
       {showGifs && (
         <GifPicker
-          onPick={(url) => { onSend('', 'gif', url); setShowGifs(false); }}
+          onPick={(url) => { onSend('', 'gif', url, replyingTo?.id || null); setReplyingTo(null); setShowGifs(false); }}
           onClose={() => setShowGifs(false)}
         />
+      )}
+
+      {replyingTo && (
+        <div
+          className="flex items-center gap-2 px-3 py-2 border-t flex-shrink-0 text-xs"
+          style={{ borderColor: 'var(--border)', background: 'var(--secondary)' }}
+        >
+          <span style={{ color: 'var(--muted-foreground)' }}>Replying to</span>
+          <span className="font-semibold truncate flex-1">{replyingTo.username}</span>
+          <button onClick={() => setReplyingTo(null)} className="icon-btn w-6 h-6" aria-label="Cancel reply">
+            <Icon.Close size={12} />
+          </button>
+        </div>
       )}
 
       <div className="border-t p-3 flex items-center gap-2 flex-shrink-0" style={{ borderColor: 'var(--border)' }}>
@@ -744,8 +806,8 @@ function ChatPanel({
           value={draft}
           maxLength={280}
           onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') { setEditingId(null); setDraft(''); } }}
-          placeholder={editingId ? 'Edit your message…' : 'Say something…'}
+          onKeyDown={(e) => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') { setEditingId(null); setReplyingTo(null); setDraft(''); } }}
+          placeholder={editingId ? 'Edit your message…' : replyingTo ? `Reply to ${replyingTo.username}…` : 'Say something…'}
           className="input-field flex-1 px-3.5 py-2.5 rounded-xl text-sm"
         />
         <button onClick={submit} className="btn-primary w-10 h-10 rounded-xl" aria-label="Send">
@@ -902,6 +964,9 @@ function QueuePanel({
   onLeaveLine,
   onKick,
   onReorderLine,
+  favorites,
+  onAddFavoriteToQueue,
+  onRemoveFavorite,
 }: {
   onClose: () => void;
   queue: any[];
@@ -918,7 +983,11 @@ function QueuePanel({
   onLeaveLine: () => void;
   onKick: (userId: string) => void;
   onReorderLine: (from: number, to: number) => void;
+  favorites: any[];
+  onAddFavoriteToQueue: (track: any) => void;
+  onRemoveFavorite: (videoId: string) => void;
 }) {
+  const [tab, setTab] = useState<'queue' | 'favorites'>('queue');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -953,181 +1022,240 @@ function QueuePanel({
     <div className="flex flex-col h-full min-h-0">
       <PanelHeader title="Queue" Glyph={Icon.QueueList} onClose={onClose} />
 
-      <div className="flex-1 overflow-y-auto min-h-0">
-        {/* ---- DJ line ---- */}
-        <section className="px-3 pt-3">
-          <div className="flex items-center gap-2 mb-2">
-            <span style={{ color: 'var(--primary)' }}><Icon.Deck size={15} /></span>
-            <h3 className="text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--muted-foreground)' }}>
-              DJ line
-            </h3>
-            <button
-              onClick={inLine ? onLeaveLine : onJoinLine}
-              className={inLine ? 'btn-ghost px-3 py-1.5 rounded-lg text-xs ml-auto' : 'btn-primary px-3 py-1.5 rounded-lg text-xs ml-auto'}
-            >
-              {inLine ? 'Leave line' : <><Icon.Plus size={13} /> Join the line</>}
-            </button>
-          </div>
+      <div className="flex items-center gap-1 px-3 pt-2 flex-shrink-0">
+        {([
+          { id: 'queue' as const, label: 'Queue' },
+          { id: 'favorites' as const, label: `Favourites${favorites.length ? ` · ${favorites.length}` : ''}` },
+        ]).map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={`px-3 py-2 text-xs font-semibold ${tab === t.id ? 'tab-active' : 'tab-inactive'}`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
 
-          <p className="text-[11px] leading-snug mb-2.5" style={{ color: 'var(--muted-foreground)' }}>
-            The room plays one track from each person's queue in turn. When your
-            turn comes round, your next track starts.
-            {inLine && myTracks === 0 && ' Add something below or your turn gets skipped.'}
-          </p>
-
-          {djs.length === 0 ? (
-            <p className="text-xs py-3" style={{ color: 'var(--muted-foreground)' }}>
-              Nobody's in the line — the room just plays the queue in order.
+      {tab === 'favorites' ? (
+        <div className="flex-1 overflow-y-auto min-h-0 px-3 py-3">
+          {favorites.length === 0 ? (
+            <p className="text-xs py-6 text-center" style={{ color: 'var(--muted-foreground)' }}>
+              Nothing saved yet. Hit save on a track from the bottom bar while it's playing.
             </p>
           ) : (
             <div className="flex flex-col gap-1.5">
-              {djs.map((dj, index) => (
+              {favorites.map((track) => (
                 <div
-                  key={dj.id}
-                  className={`dj-row ${dj.id === currentDjId ? 'is-current' : ''}`}
-                  draggable={canModerate}
-                  onDragStart={() => { dragDj.current = index; }}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={() => {
-                    if (dragDj.current !== null && dragDj.current !== index) onReorderLine(dragDj.current, index);
-                    dragDj.current = null;
-                  }}
+                  key={track.videoId}
+                  className="flex items-center gap-2 p-2 rounded-xl"
+                  style={{ background: 'var(--secondary)', border: '1px solid var(--border)' }}
                 >
-                  {canModerate && (
-                    <span className="queue-drag-handle" style={{ color: 'var(--muted-foreground)' }} title="Drag to reorder">
-                      <Icon.Grip size={14} />
-                    </span>
-                  )}
-                  <span className="text-xs font-bold w-4 text-center" style={{ color: 'var(--muted-foreground)' }}>
-                    {index + 1}
-                  </span>
-                  <AvatarSprite skin={dj.avatarSkin} size={26} faceOnly />
+                  <img src={track.thumbnail} alt="" className="w-12 h-9 rounded object-cover flex-shrink-0" />
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold truncate">
-                      {dj.username}
-                      {dj.id === meId && <span style={{ color: 'var(--muted-foreground)' }}> · you</span>}
-                    </p>
-                    <p className="text-[10px]" style={{ color: 'var(--muted-foreground)' }}>
-                      {dj.id === currentDjId ? 'on the decks now' : `${dj.trackCount} track${dj.trackCount === 1 ? '' : 's'} ready`}
-                    </p>
+                    <p className="text-xs font-semibold truncate">{track.title}</p>
                   </div>
-                  {canModerate && dj.id !== meId && (
-                    <button onClick={() => onKick(dj.id)} className="icon-btn w-7 h-7" title="Remove from line" style={{ color: '#f87171' }}>
-                      <Icon.Close size={14} />
-                    </button>
-                  )}
+                  <button
+                    onClick={() => onAddFavoriteToQueue(track)}
+                    className="icon-btn w-7 h-7"
+                    title="Add to queue"
+                    aria-label={`Add ${track.title} to queue`}
+                  >
+                    <Icon.Plus size={14} />
+                  </button>
+                  <button
+                    onClick={() => onRemoveFavorite(track.videoId)}
+                    className="icon-btn w-7 h-7"
+                    style={{ color: '#f87171' }}
+                    title="Remove from favourites"
+                    aria-label={`Remove ${track.title} from favourites`}
+                  >
+                    <Icon.Trash size={14} />
+                  </button>
                 </div>
               ))}
             </div>
           )}
-          {myTurn && (
-            <p className="text-xs font-semibold mt-2" style={{ color: 'var(--primary)' }}>
-              You're on the decks right now.
-            </p>
-          )}
-        </section>
-
-        <div className="h-px mx-3 my-4" style={{ background: 'var(--border)' }} />
-
-        {/* ---- Up next ---- */}
-        <section className="px-3 pb-3">
-          <h3 className="text-xs font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--muted-foreground)' }}>
-            Up next · {queue.length}
-          </h3>
-
-          {queue.length === 0 && (
-            <p className="text-xs py-3" style={{ color: 'var(--muted-foreground)' }}>
-              Nothing queued. Search below and add something.
-            </p>
-          )}
-
-          <div className="flex flex-col gap-1.5">
-            {queue.map((item, index) => (
-              <div
-                key={item.id}
-                className="flex items-center gap-2 p-2 rounded-xl"
-                style={{ background: 'var(--secondary)', border: '1px solid var(--border)' }}
-                draggable
-                onDragStart={() => { dragItem.current = index; }}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={() => {
-                  if (dragItem.current !== null && dragItem.current !== index) onReorder(dragItem.current, index);
-                  dragItem.current = null;
-                }}
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto min-h-0">
+          {/* ---- DJ line ---- */}
+          <section className="px-3 pt-3">
+            <div className="flex items-center gap-2 mb-2">
+              <span style={{ color: 'var(--primary)' }}><Icon.Deck size={15} /></span>
+              <h3 className="text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--muted-foreground)' }}>
+                DJ line
+              </h3>
+              <button
+                onClick={inLine ? onLeaveLine : onJoinLine}
+                className={inLine ? 'btn-ghost px-3 py-1.5 rounded-lg text-xs ml-auto' : 'btn-primary px-3 py-1.5 rounded-lg text-xs ml-auto'}
               >
-                <span className="queue-drag-handle" style={{ color: 'var(--muted-foreground)' }}>
-                  <Icon.Grip size={14} />
-                </span>
-                <img src={item.thumbnail} alt="" className="w-12 h-9 rounded object-cover flex-shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold truncate">{item.title}</p>
-                  <p className="text-[10px] truncate" style={{ color: 'var(--muted-foreground)' }}>
-                    {item.addedBy} · {item.durationText}
-                  </p>
-                </div>
-                <div className="flex flex-col">
-                  <button onClick={() => index > 0 && onReorder(index, index - 1)} className="icon-btn w-6 h-5" aria-label="Move up">
-                    <Icon.ChevronUp size={13} />
-                  </button>
-                  <button onClick={() => index < queue.length - 1 && onReorder(index, index + 1)} className="icon-btn w-6 h-5" aria-label="Move down">
-                    <Icon.ChevronDown size={13} />
-                  </button>
-                </div>
-                <button onClick={() => onRemove(item.id)} className="icon-btn w-7 h-7" style={{ color: '#f87171' }} aria-label="Remove from queue">
-                  <Icon.Trash size={14} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </section>
+                {inLine ? 'Leave line' : <><Icon.Plus size={13} /> Join the line</>}
+              </button>
+            </div>
 
-        {/* ---- Search results ---- */}
-        {(results.length > 0 || searching) && (
+            <p className="text-[11px] leading-snug mb-2.5" style={{ color: 'var(--muted-foreground)' }}>
+              Nobody plays until they've joined the line and it's their turn — the
+              room stays quiet otherwise.
+              {inLine && myTracks === 0 && ' Add something below or your turn gets skipped.'}
+            </p>
+
+            {djs.length === 0 ? (
+              <p className="text-xs py-3" style={{ color: 'var(--muted-foreground)' }}>
+                Nobody's in the line yet — join it to start the music.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                {djs.map((dj, index) => (
+                  <div
+                    key={dj.id}
+                    className={`dj-row ${dj.id === currentDjId ? 'is-current' : ''}`}
+                    draggable={canModerate}
+                    onDragStart={() => { dragDj.current = index; }}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={() => {
+                      if (dragDj.current !== null && dragDj.current !== index) onReorderLine(dragDj.current, index);
+                      dragDj.current = null;
+                    }}
+                  >
+                    {canModerate && (
+                      <span className="queue-drag-handle" style={{ color: 'var(--muted-foreground)' }} title="Drag to reorder">
+                        <Icon.Grip size={14} />
+                      </span>
+                    )}
+                    <span className="text-xs font-bold w-4 text-center" style={{ color: 'var(--muted-foreground)' }}>
+                      {index + 1}
+                    </span>
+                    <AvatarSprite skin={dj.avatarSkin} size={26} faceOnly />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold truncate">
+                        {dj.username}
+                        {dj.id === meId && <span style={{ color: 'var(--muted-foreground)' }}> · you</span>}
+                      </p>
+                      <p className="text-[10px]" style={{ color: 'var(--muted-foreground)' }}>
+                        {dj.id === currentDjId ? 'on the decks now' : `${dj.trackCount} track${dj.trackCount === 1 ? '' : 's'} ready`}
+                      </p>
+                    </div>
+                    {canModerate && dj.id !== meId && (
+                      <button onClick={() => onKick(dj.id)} className="icon-btn w-7 h-7" title="Remove from line" style={{ color: '#f87171' }}>
+                        <Icon.Close size={14} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            {myTurn && (
+              <p className="text-xs font-semibold mt-2" style={{ color: 'var(--primary)' }}>
+                You're on the decks right now.
+              </p>
+            )}
+          </section>
+
+          <div className="h-px mx-3 my-4" style={{ background: 'var(--border)' }} />
+
+          {/* ---- Up next ---- */}
           <section className="px-3 pb-3">
             <h3 className="text-xs font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--muted-foreground)' }}>
-              {searching ? 'Searching…' : 'Results'}
+              Up next · {queue.length}
             </h3>
+
+            {queue.length === 0 && (
+              <p className="text-xs py-3" style={{ color: 'var(--muted-foreground)' }}>
+                Nothing queued. Search below and add something.
+              </p>
+            )}
+
             <div className="flex flex-col gap-1.5">
-              {results.map((r) => (
+              {queue.map((item, index) => (
                 <div
-                  key={r.videoId}
+                  key={item.id}
                   className="flex items-center gap-2 p-2 rounded-xl"
-                  style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+                  style={{ background: 'var(--secondary)', border: '1px solid var(--border)' }}
+                  draggable
+                  onDragStart={() => { dragItem.current = index; }}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => {
+                    if (dragItem.current !== null && dragItem.current !== index) onReorder(dragItem.current, index);
+                    dragItem.current = null;
+                  }}
                 >
-                  <img src={r.thumbnail} alt="" className="w-12 h-9 rounded object-cover flex-shrink-0" />
+                  <span className="queue-drag-handle" style={{ color: 'var(--muted-foreground)' }}>
+                    <Icon.Grip size={14} />
+                  </span>
+                  <img src={item.thumbnail} alt="" className="w-12 h-9 rounded object-cover flex-shrink-0" />
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold truncate">{r.title}</p>
+                    <p className="text-xs font-semibold truncate">{item.title}</p>
                     <p className="text-[10px] truncate" style={{ color: 'var(--muted-foreground)' }}>
-                      {r.author} · {r.durationText}
+                      {item.addedBy} · {item.durationText}
                     </p>
                   </div>
-                  <button
-                    onClick={() => onAdd({ videoId: r.videoId, title: r.title, thumbnail: r.thumbnail, duration: r.duration })}
-                    className="btn-primary w-8 h-8 rounded-lg"
-                    aria-label={`Add ${r.title}`}
-                  >
-                    <Icon.Plus size={15} />
+                  <div className="flex flex-col">
+                    <button onClick={() => index > 0 && onReorder(index, index - 1)} className="icon-btn w-6 h-5" aria-label="Move up">
+                      <Icon.ChevronUp size={13} />
+                    </button>
+                    <button onClick={() => index < queue.length - 1 && onReorder(index, index + 1)} className="icon-btn w-6 h-5" aria-label="Move down">
+                      <Icon.ChevronDown size={13} />
+                    </button>
+                  </div>
+                  <button onClick={() => onRemove(item.id)} className="icon-btn w-7 h-7" style={{ color: '#f87171' }} aria-label="Remove from queue">
+                    <Icon.Trash size={14} />
                   </button>
                 </div>
               ))}
             </div>
           </section>
-        )}
-      </div>
 
-      <div className="border-t p-3 flex-shrink-0" style={{ borderColor: 'var(--border)' }}>
-        <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--muted-foreground)' }}>
-            <Icon.Search size={15} />
-          </span>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search YouTube…"
-            className="input-field w-full pl-9 pr-3 py-2.5 rounded-xl text-sm"
-          />
+          {/* ---- Search results ---- */}
+          {(results.length > 0 || searching) && (
+            <section className="px-3 pb-3">
+              <h3 className="text-xs font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--muted-foreground)' }}>
+                {searching ? 'Searching…' : 'Results'}
+              </h3>
+              <div className="flex flex-col gap-1.5">
+                {results.map((r) => (
+                  <div
+                    key={r.videoId}
+                    className="flex items-center gap-2 p-2 rounded-xl"
+                    style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+                  >
+                    <img src={r.thumbnail} alt="" className="w-12 h-9 rounded object-cover flex-shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold truncate">{r.title}</p>
+                      <p className="text-[10px] truncate" style={{ color: 'var(--muted-foreground)' }}>
+                        {r.author} · {r.durationText}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => onAdd({ videoId: r.videoId, title: r.title, thumbnail: r.thumbnail, duration: r.duration })}
+                      className="btn-primary w-8 h-8 rounded-lg"
+                      aria-label={`Add ${r.title}`}
+                    >
+                      <Icon.Plus size={15} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
         </div>
-      </div>
+      )}
+
+      {tab === 'queue' && (
+        <div className="border-t p-3 flex-shrink-0" style={{ borderColor: 'var(--border)' }}>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--muted-foreground)' }}>
+              <Icon.Search size={15} />
+            </span>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search YouTube…"
+              className="input-field w-full pl-9 pr-3 py-2.5 rounded-xl text-sm"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
