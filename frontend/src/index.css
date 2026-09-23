@@ -506,23 +506,42 @@ h1, h2, h3, h4 {
  * Mobile
  * ------------------------------------------------------------------ */
 
-@media (max-width: 640px) {
+@media (max-width: 900px) {
   /* Title bar and bottom bar controls run a size smaller on a phone —
      they were sized for a mouse cursor, not a thumb next to five others. */
   .title-bar .icon-btn {
-    width: 32px;
-    height: 32px;
-  }
-  .bottom-bar {
-    gap: 2px;
-  }
-  .bottom-bar .btn-ghost {
-    padding: 5px 8px;
-    font-size: 11px;
-  }
-  .bottom-bar .icon-btn {
     width: 30px;
     height: 30px;
+  }
+  .title-bar .icon-btn svg {
+    width: 15px;
+    height: 15px;
+  }
+  .bottom-bar {
+    gap: 1px;
+  }
+  .bottom-bar .btn-ghost {
+    padding: 4px 6px;
+    font-size: 10px;
+    gap: 4px;
+  }
+  .bottom-bar .btn-ghost svg {
+    width: 14px;
+    height: 14px;
+  }
+  .bottom-bar .icon-btn,
+  .bottom-bar button.btn-ghost.icon-btn {
+    width: 26px;
+    height: 26px;
+  }
+  .room-sidebar .icon-btn {
+    width: 26px;
+    height: 26px;
+  }
+  .room-sidebar .btn-primary,
+  .room-sidebar .btn-ghost {
+    padding: 5px 10px;
+    font-size: 11px;
   }
   .draggable-sidebar > div {
     width: 52px !important;

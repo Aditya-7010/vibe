@@ -162,7 +162,16 @@ def serialize_dj(slot, current_dj_id=None, track_count=0):
 
 
 def room_djs(room: Room, playback: Playback = None):
-    """The DJ line, in turn order, with how many tracks each person has left."""
+    """
+    The DJ line, in display order, with how many tracks each person has left.
+
+    Display order (not the same as the stored `position`, which is only the
+    fair round-robin bookkeeping used to pick who's next):
+      1. Whoever's track is currently playing always shows up first.
+      2. Everyone else keeps their relative order, except that anyone sitting
+         with an empty personal queue sinks to the bottom — they aren't
+         holding anything up, so they shouldn't look like they're next.
+    """
     playback = playback or get_playback(room)
     slots = list(
         room.dj_slots.select_related("user").order_by("position", "created_at")
@@ -170,9 +179,22 @@ def room_djs(room: Room, playback: Playback = None):
     counts = {}
     for item in room.queue_items.filter(played=False).values_list("added_by_id", flat=True):
         counts[item] = counts.get(item, 0) + 1
+
+    current_id = playback.dj_id
+    current_slot = None
+    rest = []
+    for slot in slots:
+        if current_id and slot.user_id == current_id:
+            current_slot = slot
+        else:
+            rest.append(slot)
+    ready = [s for s in rest if counts.get(s.user_id, 0) > 0]
+    empty = [s for s in rest if counts.get(s.user_id, 0) == 0]
+    ordered = ([current_slot] if current_slot else []) + ready + empty
+
     return [
         serialize_dj(slot, playback.dj_id, counts.get(slot.user_id, 0))
-        for slot in slots
+        for slot in ordered
     ]
 
 

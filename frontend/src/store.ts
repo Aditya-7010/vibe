@@ -136,7 +136,7 @@ interface AppState {
     duration: number;
   }) => void;
   removeFromQueue: (id: string) => void;
-  reorderQueue: (fromIdx: number, toIdx: number) => void;
+  reorderQueue: (fromId: string, toId: string) => void;
   playNext: () => void;
   syncPlayback: () => void;
   getPlaybackPosition: () => number;
@@ -577,9 +577,14 @@ export const useStore = create<AppState>((set, get) => {
     removeFromQueue: (id) => {
       get().socket?.send('queue_remove', { id });
     },
-    reorderQueue: (fromIdx, toIdx) => {
+    // Id-based rather than index-based: the panel only ever shows a filtered
+    // view of the room's queue (your own tracks), so a display index doesn't
+    // line up with a position in the full underlying list.
+    reorderQueue: (fromId, toId) => {
       const queue = [...get().roomQueue];
-      if (fromIdx < 0 || fromIdx >= queue.length) return;
+      const fromIdx = queue.findIndex((q) => q.id === fromId);
+      const toIdx = queue.findIndex((q) => q.id === toId);
+      if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return;
       const [moved] = queue.splice(fromIdx, 1);
       queue.splice(toIdx, 0, moved);
       set({ roomQueue: queue }); // optimistic; server echoes the final order

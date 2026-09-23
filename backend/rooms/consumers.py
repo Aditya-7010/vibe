@@ -244,7 +244,7 @@ class RoomConsumer(AsyncJsonWebsocketConsumer):
 
     async def do_dj_leave(self, payload):
         await self.leave_line(str(self.user.id))
-        await self.broadcast_line()
+        await self.skip_if_current(str(self.user.id))
 
     async def do_dj_kick(self, payload):
         """Remove somebody from the line — owner and admins only."""
@@ -256,7 +256,24 @@ class RoomConsumer(AsyncJsonWebsocketConsumer):
                 }
             )
             return
-        await self.leave_line(payload.get("userId"))
+        user_id = payload.get("userId")
+        await self.leave_line(user_id)
+        await self.skip_if_current(user_id)
+
+    async def skip_if_current(self, user_id):
+        """
+        Leaving (or being kicked from) the line gives up your spot — and if
+        your track was the one playing, it shouldn't keep playing after
+        you've left, even if you're still standing in the room. Hand off to
+        the next present DJ right away, rather than waiting for the next
+        tick or for someone to notice you're gone.
+        """
+        changed, playback = await self.force_advance_if_dj(user_id)
+        if changed:
+            await self.group_broadcast({"type": "playback", "payload": playback})
+            await self.group_broadcast(
+                {"type": "queue", "payload": await self.get_queue()}
+            )
         await self.broadcast_line()
 
     async def do_dj_reorder(self, payload):
@@ -555,6 +572,25 @@ class RoomConsumer(AsyncJsonWebsocketConsumer):
             playback = get_playback(room)
             changed = playback.ensure_current()
         return changed, serialize_playback(playback)
+
+    @database_sync_to_async
+    def force_advance_if_dj(self, user_id):
+        """
+        Unlike `advance_playback` (which only reacts to who's physically in
+        the room), this checks DJ-line membership: it advances the moment
+        the given user was the one on the decks, whether or not they're
+        still standing in the room.
+        """
+        if not user_id:
+            return False, None
+        room = Room.objects.get(pk=self.room_id)
+        with transaction.atomic():
+            playback = get_playback(room)
+            if str(playback.dj_id or "") != str(user_id):
+                return False, None
+            playback.advance()
+            playback.save()
+        return True, serialize_playback(playback)
 
     @database_sync_to_async
     def skip_track(self):

@@ -615,6 +615,20 @@ function ChatPanel({
   const endRef = useRef<HTMLDivElement | null>(null);
   const pressTimer = useRef<any>(null);
 
+  // Tapping anywhere outside the open message-options menu closes it.
+  useEffect(() => {
+    if (!menuFor) return;
+    const closeIfOutside = (e: Event) => {
+      const target = e.target as Node;
+      if (!(target instanceof Node)) return;
+      if (!(target as Element).closest?.('.chat-options-menu, .chat-options-trigger')) {
+        setMenuFor(null);
+      }
+    };
+    document.addEventListener('pointerdown', closeIfOutside);
+    return () => document.removeEventListener('pointerdown', closeIfOutside);
+  }, [menuFor]);
+
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length]);
@@ -714,7 +728,7 @@ function ChatPanel({
               {/* Always tappable — hover-only chrome doesn't exist on a phone. */}
               <button
                 onClick={() => setMenuFor(menuFor === m.id ? null : m.id)}
-                className="icon-btn w-7 h-7 flex-shrink-0"
+                className="icon-btn w-7 h-7 flex-shrink-0 chat-options-trigger"
                 style={{ opacity: 0.65 }}
                 aria-label="Message actions"
               >
@@ -723,8 +737,15 @@ function ChatPanel({
 
               {menuFor === m.id && (
                 <div
-                  className="absolute right-0 top-6 z-30 rounded-xl border p-2"
-                  style={{ background: 'var(--card)', borderColor: 'var(--border)', boxShadow: 'var(--elev-2)', minWidth: 160 }}
+                  className="absolute right-0 top-6 z-30 rounded-xl border p-2 chat-options-menu"
+                  style={{
+                    background: 'color-mix(in srgb, var(--card) 94%, transparent)',
+                    backdropFilter: 'blur(12px)',
+                    WebkitBackdropFilter: 'blur(12px)',
+                    borderColor: 'var(--border)',
+                    boxShadow: 'var(--elev-2)',
+                    minWidth: 160,
+                  }}
                 >
                   <div className="flex gap-1 mb-2 flex-wrap">
                     {REACTIONS.map((emoji) => (
@@ -763,9 +784,6 @@ function ChatPanel({
                       <Icon.Trash size={13} /> Delete
                     </button>
                   )}
-                  <button onClick={() => setMenuFor(null)} className="btn-ghost w-full px-2 py-1.5 rounded-lg text-xs justify-start">
-                    <Icon.Close size={13} /> Close
-                  </button>
                 </div>
               )}
             </div>
@@ -978,7 +996,7 @@ function QueuePanel({
   currentDjId: string;
   onAdd: (item: { videoId: string; title: string; thumbnail: string; duration: number }) => void;
   onRemove: (id: string) => void;
-  onReorder: (from: number, to: number) => void;
+  onReorder: (fromId: string, toId: string) => void;
   onJoinLine: () => void;
   onLeaveLine: () => void;
   onKick: (userId: string) => void;
@@ -987,11 +1005,11 @@ function QueuePanel({
   onAddFavoriteToQueue: (track: any) => void;
   onRemoveFavorite: (videoId: string) => void;
 }) {
-  const [tab, setTab] = useState<'queue' | 'favorites'>('queue');
+  const [tab, setTab] = useState<'queue' | 'dj' | 'favorites'>('queue');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
-  const dragItem = useRef<number | null>(null);
+  const dragItem = useRef<string | null>(null);
   const dragDj = useRef<number | null>(null);
 
   /* Search fires as you type — no enter key needed. */
@@ -1016,7 +1034,11 @@ function QueuePanel({
     return () => { clearTimeout(timer); controller.abort(); };
   }, [query]);
 
-  const myTracks = useMemo(() => queue.filter((q) => q.addedById === meId).length, [queue, meId]);
+  // Only your own tracks show up here — everyone's personal queue stays
+  // private to them; the DJ line (its own tab) is what shows whose turn is
+  // coming up.
+  const myQueue = useMemo(() => queue.filter((q) => q.addedById === meId), [queue, meId]);
+  const myTracks = myQueue.length;
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -1025,6 +1047,7 @@ function QueuePanel({
       <div className="flex items-center gap-1 px-3 pt-2 flex-shrink-0">
         {([
           { id: 'queue' as const, label: 'Queue' },
+          { id: 'dj' as const, label: `DJ line${djs.length ? ` · ${djs.length}` : ''}` },
           { id: 'favorites' as const, label: `Favourites${favorites.length ? ` · ${favorites.length}` : ''}` },
         ]).map((t) => (
           <button
@@ -1077,10 +1100,10 @@ function QueuePanel({
             </div>
           )}
         </div>
-      ) : (
+      ) : tab === 'dj' ? (
         <div className="flex-1 overflow-y-auto min-h-0">
           {/* ---- DJ line ---- */}
-          <section className="px-3 pt-3">
+          <section className="px-3 pt-3 pb-3">
             <div className="flex items-center gap-2 mb-2">
               <span style={{ color: 'var(--primary)' }}><Icon.Deck size={15} /></span>
               <h3 className="text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--muted-foreground)' }}>
@@ -1097,7 +1120,8 @@ function QueuePanel({
             <p className="text-[11px] leading-snug mb-2.5" style={{ color: 'var(--muted-foreground)' }}>
               Nobody plays until they've joined the line and it's their turn — the
               room stays quiet otherwise.
-              {inLine && myTracks === 0 && ' Add something below or your turn gets skipped.'}
+              {inLine && myTracks === 0 && ' Add something in the Queue tab or your turn gets skipped.'}
+              {inLine && ' Leaving the line while your track is playing skips it right away.'}
             </p>
 
             {djs.length === 0 ? (
@@ -1151,32 +1175,32 @@ function QueuePanel({
               </p>
             )}
           </section>
-
-          <div className="h-px mx-3 my-4" style={{ background: 'var(--border)' }} />
-
-          {/* ---- Up next ---- */}
-          <section className="px-3 pb-3">
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto min-h-0">
+          {/* ---- Up next (your own tracks only) ---- */}
+          <section className="px-3 pt-3 pb-3">
             <h3 className="text-xs font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--muted-foreground)' }}>
-              Up next · {queue.length}
+              Your queue · {myQueue.length}
             </h3>
 
-            {queue.length === 0 && (
+            {myQueue.length === 0 && (
               <p className="text-xs py-3" style={{ color: 'var(--muted-foreground)' }}>
                 Nothing queued. Search below and add something.
               </p>
             )}
 
             <div className="flex flex-col gap-1.5">
-              {queue.map((item, index) => (
+              {myQueue.map((item, index) => (
                 <div
                   key={item.id}
                   className="flex items-center gap-2 p-2 rounded-xl"
                   style={{ background: 'var(--secondary)', border: '1px solid var(--border)' }}
                   draggable
-                  onDragStart={() => { dragItem.current = index; }}
+                  onDragStart={() => { dragItem.current = item.id; }}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={() => {
-                    if (dragItem.current !== null && dragItem.current !== index) onReorder(dragItem.current, index);
+                    if (dragItem.current !== null && dragItem.current !== item.id) onReorder(dragItem.current, item.id);
                     dragItem.current = null;
                   }}
                 >
@@ -1187,14 +1211,22 @@ function QueuePanel({
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-semibold truncate">{item.title}</p>
                     <p className="text-[10px] truncate" style={{ color: 'var(--muted-foreground)' }}>
-                      {item.addedBy} · {item.durationText}
+                      {item.durationText}
                     </p>
                   </div>
                   <div className="flex flex-col">
-                    <button onClick={() => index > 0 && onReorder(index, index - 1)} className="icon-btn w-6 h-5" aria-label="Move up">
+                    <button
+                      onClick={() => index > 0 && onReorder(item.id, myQueue[index - 1].id)}
+                      className="icon-btn w-6 h-5"
+                      aria-label="Move up"
+                    >
                       <Icon.ChevronUp size={13} />
                     </button>
-                    <button onClick={() => index < queue.length - 1 && onReorder(index, index + 1)} className="icon-btn w-6 h-5" aria-label="Move down">
+                    <button
+                      onClick={() => index < myQueue.length - 1 && onReorder(item.id, myQueue[index + 1].id)}
+                      className="icon-btn w-6 h-5"
+                      aria-label="Move down"
+                    >
                       <Icon.ChevronDown size={13} />
                     </button>
                   </div>
