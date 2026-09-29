@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>vibe — synced music listening rooms</title>
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#0b0a14" />
+    <style>
+      /* Stops the rubber-band/pull-to-refresh gesture, which feels broken
+         inside a native app shell instead of a normal browser tab. */
+      html, body {
+        overscroll-behavior-y: contain;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>

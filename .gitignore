@@ -23,6 +23,7 @@ db.sqlite3-journal
 node_modules/
 dist/
 *.log
+android/
 
 # Editors / OS
 .DS_Store
