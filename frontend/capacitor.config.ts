@@ -6,7 +6,7 @@ const config: CapacitorConfig = {
   webDir: 'dist',
 
   server: {
-    url: 'https://vibe-rust-one.vercel.app',
+    url: 'https://vibe-omega-virid.vercel.app',
     cleartext: false,
   },
 

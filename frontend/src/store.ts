@@ -91,6 +91,7 @@ interface AppState {
   savedSongs: string[];
   likedSongs: string[];
   dislikedSongs: string[];
+  songFeedbackCounts: { like: number; dislike: number; save: number };
   favorites: FavoriteTrack[];
   favoritesLoaded: boolean;
 
@@ -148,6 +149,7 @@ interface AppState {
 
   triggerLikeEffect: () => void;
   toggleSongFeedback: (kind: 'like' | 'dislike' | 'save') => Promise<void>;
+  fetchSongFeedbackCounts: (videoId: string) => Promise<void>;
   loadFavorites: () => Promise<void>;
   addFavoriteToQueue: (track: FavoriteTrack) => void;
   removeFavorite: (videoId: string) => Promise<void>;
@@ -182,6 +184,9 @@ export const useStore = create<AppState>((set, get) => {
           djs: djs || [],
           playback: { ...playback, receivedAt: Date.now() },
         });
+        if (playback?.current?.videoId) {
+          get().fetchSongFeedbackCounts(playback.current.videoId);
+        }
         break;
       }
       case 'presence_join': {
@@ -260,8 +265,8 @@ export const useStore = create<AppState>((set, get) => {
         break;
       }
       case 'playback': {
+        const trackChanged = event.payload.revision !== get().playback.revision;
         set((s) => {
-          const trackChanged = event.payload.revision !== s.playback.revision;
           const patch: Partial<AppState> = {
             playback: { ...event.payload, receivedAt: Date.now() },
           };
@@ -278,6 +283,13 @@ export const useStore = create<AppState>((set, get) => {
           }
           return patch;
         });
+        if (trackChanged) {
+          if (event.payload.current?.videoId) {
+            get().fetchSongFeedbackCounts(event.payload.current.videoId);
+          } else {
+            set({ songFeedbackCounts: { like: 0, dislike: 0, save: 0 } });
+          }
+        }
         break;
       }
       case 'error': {
@@ -325,6 +337,7 @@ export const useStore = create<AppState>((set, get) => {
     savedSongs: [],
     likedSongs: [],
     dislikedSongs: [],
+    songFeedbackCounts: { like: 0, dislike: 0, save: 0 },
     favorites: [],
     favoritesLoaded: false,
 
@@ -645,6 +658,18 @@ export const useStore = create<AppState>((set, get) => {
       // i.e. it lasts the whole song, how ever long that is.
     },
 
+    fetchSongFeedbackCounts: async (videoId) => {
+      if (!videoId) return;
+      try {
+        const data = await feedbackApi.counts(videoId);
+        // The song can change again while this request is in flight —
+        // don't let a slow, stale response overwrite the current song's counts.
+        if (get().playback.current?.videoId !== videoId) return;
+        set({ songFeedbackCounts: data.counts });
+      } catch {
+        /* non-critical — the buttons just show without counts */
+      }
+    },
     toggleSongFeedback: async (kind) => {
       const { playback, currentRoom } = get();
       const song = playback.current;
@@ -666,6 +691,7 @@ export const useStore = create<AppState>((set, get) => {
             ? Array.from(new Set([...list, song.videoId]))
             : list.filter((id) => id !== song.videoId);
           const patch: any = { [key]: next };
+          if (data.counts) patch.songFeedbackCounts = data.counts;
           if (kind === 'like' && data.active) {
             patch.dislikedSongs = s.dislikedSongs.filter((id) => id !== song.videoId);
           }

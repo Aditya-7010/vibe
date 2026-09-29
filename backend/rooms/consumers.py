@@ -439,7 +439,7 @@ class RoomConsumer(AsyncJsonWebsocketConsumer):
             .values_list("id", flat=True)[:100]
         )
         Message.objects.filter(room_id=self.room_id).exclude(id__in=keep_ids).delete()
-        return serialize_message(message, reactions={})
+        return serialize_message(message, user=self.user, reactions={})
 
     @database_sync_to_async
     def edit_message(self, message_id, text):
@@ -456,7 +456,7 @@ class RoomConsumer(AsyncJsonWebsocketConsumer):
         message.text = text
         message.edited_at = timezone.now()
         message.save(update_fields=["text", "edited_at"])
-        return serialize_message(message)
+        return serialize_message(message, user=self.user)
 
     @database_sync_to_async
     def delete_message(self, message_id):
@@ -471,7 +471,7 @@ class RoomConsumer(AsyncJsonWebsocketConsumer):
         message.text = ""
         message.gif_url = ""
         message.save(update_fields=["deleted", "text", "gif_url"])
-        return serialize_message(message)
+        return serialize_message(message, user=self.user)
 
     @database_sync_to_async
     def toggle_reaction(self, message_id, emoji):
@@ -492,7 +492,7 @@ class RoomConsumer(AsyncJsonWebsocketConsumer):
             existing.delete()
         else:
             Reaction.objects.create(message=message, user=self.user, emoji=emoji)
-        return serialize_message(message)
+        return serialize_message(message, user=self.user)
 
     @database_sync_to_async
     def add_queue_item(self, payload):

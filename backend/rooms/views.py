@@ -226,6 +226,15 @@ def search_gifs(request):
 def song_feedback(request):
     """Like / dislike / save the current track. POST toggles."""
     if request.method == "GET":
+        video_id = request.query_params.get("videoId")
+        if video_id:
+            # Counts for one track — how many people liked/disliked/saved it,
+            # regardless of who's asking.
+            counts = {
+                kind: SongFeedback.objects.filter(video_id=video_id, kind=kind).count()
+                for kind in ("like", "dislike", "save")
+            }
+            return Response({"videoId": video_id, "counts": counts})
         kind = request.query_params.get("kind", "save")
         items = SongFeedback.objects.filter(user=request.user, kind=kind)
         return Response(
@@ -257,25 +266,31 @@ def song_feedback(request):
     ).first()
     if existing:
         existing.delete()
-        return Response({"videoId": video_id, "kind": kind, "active": False})
+        active = False
+    else:
+        if kind in {"like", "dislike"}:
+            # Liking clears a dislike and vice versa.
+            opposite = "dislike" if kind == "like" else "like"
+            SongFeedback.objects.filter(
+                user=request.user, video_id=video_id, kind=opposite
+            ).delete()
 
-    if kind in {"like", "dislike"}:
-        # Liking clears a dislike and vice versa.
-        opposite = "dislike" if kind == "like" else "like"
-        SongFeedback.objects.filter(
-            user=request.user, video_id=video_id, kind=opposite
-        ).delete()
+        SongFeedback.objects.create(
+            user=request.user,
+            room=room,
+            video_id=video_id,
+            title=(request.data.get("title") or "")[:200],
+            thumbnail=request.data.get("thumbnail") or "",
+            duration=int(request.data.get("duration") or 0),
+            kind=kind,
+        )
+        active = True
 
-    SongFeedback.objects.create(
-        user=request.user,
-        room=room,
-        video_id=video_id,
-        title=(request.data.get("title") or "")[:200],
-        thumbnail=request.data.get("thumbnail") or "",
-        duration=int(request.data.get("duration") or 0),
-        kind=kind,
-    )
-    return Response({"videoId": video_id, "kind": kind, "active": True})
+    counts = {
+        k: SongFeedback.objects.filter(video_id=video_id, kind=k).count()
+        for k in ("like", "dislike", "save")
+    }
+    return Response({"videoId": video_id, "kind": kind, "active": active, "counts": counts})
 
 
 @api_view(["GET"])

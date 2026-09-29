@@ -276,7 +276,6 @@ export default function Dashboard() {
           </button>
 
           <SidebarBtn Glyph={Icon.Settings} label="Settings" onClick={() => navigate('/settings')} />
-          <SidebarBtn Glyph={Icon.Users} label="Friends" onClick={() => navigate('/profile')} />
           <div className="h-px my-1" style={{ background: 'var(--border)' }} />
           <SidebarBtn Glyph={Icon.Exit} label="Sign out" onClick={handleSignOut} />
         </div>

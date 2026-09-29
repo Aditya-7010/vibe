@@ -112,6 +112,7 @@ export default function Room() {
     likedSongs,
     dislikedSongs,
     savedSongs,
+    songFeedbackCounts,
     favorites,
     favoritesLoaded,
     loadFavorites,
@@ -475,18 +476,21 @@ export default function Room() {
         <BarBtn
           Glyph={Icon.Heart}
           label="Like"
+          count={songFeedbackCounts.like}
           active={!!currentSong && likedSongs.includes(currentSong.videoId)}
           onClick={() => toggleSongFeedback('like')}
         />
         <BarBtn
           Glyph={Icon.ThumbDown}
           label="Dislike"
+          count={songFeedbackCounts.dislike}
           active={!!currentSong && dislikedSongs.includes(currentSong.videoId)}
           onClick={() => toggleSongFeedback('dislike')}
         />
         <BarBtn
           Glyph={Icon.Bookmark}
           label="Save"
+          count={songFeedbackCounts.save}
           active={!!currentSong && savedSongs.includes(currentSong.videoId)}
           onClick={() => toggleSongFeedback('save')}
         />
@@ -536,6 +540,21 @@ function StageAvatar({
   onRemoveFriend: () => void;
 }) {
   const [open, setOpen] = useState(false);
+
+  // Tapping anywhere outside the popup closes it — it used to only close
+  // via its own "Close" button, so it'd stay open forever otherwise.
+  useEffect(() => {
+    if (!open) return;
+    const closeIfOutside = (e: Event) => {
+      const target = e.target as Node;
+      if (!(target instanceof Node)) return;
+      if (!(target as Element).closest?.('.avatar-popup, .avatar-idle, .stage-avatar button')) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', closeIfOutside);
+    return () => document.removeEventListener('pointerdown', closeIfOutside);
+  }, [open]);
 
   return (
     <div className="stage-avatar">
@@ -659,7 +678,16 @@ function ChatPanel({
           </p>
         )}
 
-        {messages.map((m) => {
+        {(() => {
+          // Deleted messages disappear entirely instead of leaving a
+          // "message deleted" placeholder bubble behind.
+          const visible = messages.filter((m) => !m.deleted);
+          return visible.map((m, i) => {
+          const prev = visible[i - 1];
+          // Consecutive messages from the same person collapse the
+          // avatar/name/timestamp header, like most chat apps — it comes
+          // back the moment anyone else posts in between.
+          const grouped = !!prev && prev.userId === m.userId;
           const mine = m.userId === meId;
           const canEdit = m.canEdit ?? mine;
           const canDelete = m.canDelete ?? (mine || canModerate);
@@ -671,11 +699,12 @@ function ChatPanel({
               onTouchStart={() => { pressTimer.current = setTimeout(() => setMenuFor(m.id), 480); }}
               onTouchEnd={() => clearTimeout(pressTimer.current)}
             >
-              <div className="flex-shrink-0 pt-0.5">
+              <div className="flex-shrink-0 pt-0.5" style={grouped ? { visibility: 'hidden', height: 0, overflow: 'hidden' } : undefined}>
                 <AvatarSprite skin={m.avatarSkin} size={28} faceOnly />
               </div>
 
               <div className="min-w-0 flex-1">
+                {!grouped && (
                 <div className="flex items-baseline gap-2">
                   <span className="text-xs font-bold truncate">{m.username}</span>
                   <span className="text-[10px]" style={{ color: 'var(--muted-foreground)' }}>
@@ -685,6 +714,7 @@ function ChatPanel({
                     <span className="text-[10px]" style={{ color: 'var(--muted-foreground)' }}>edited</span>
                   )}
                 </div>
+                )}
 
                 {m.replyTo && (
                   <div
@@ -739,7 +769,7 @@ function ChatPanel({
 
               {menuFor === m.id && (
                 <div
-                  className="absolute right-0 top-6 z-30 rounded-xl border p-2 chat-options-menu"
+                  className="absolute right-0 bottom-full mb-1 z-30 rounded-xl border p-2 chat-options-menu"
                   style={{
                     background: 'color-mix(in srgb, var(--card) 94%, transparent)',
                     backdropFilter: 'blur(12px)',
@@ -790,7 +820,8 @@ function ChatPanel({
               )}
             </div>
           );
-        })}
+          });
+        })()}
         <div ref={endRef} />
       </div>
 
@@ -1316,12 +1347,14 @@ function BarBtn({
   onClick,
   active,
   badge,
+  count,
 }: {
   Glyph: React.FC<any>;
   label: string;
   onClick: () => void;
   active?: boolean;
   badge?: string;
+  count?: number;
 }) {
   return (
     <button
@@ -1332,6 +1365,11 @@ function BarBtn({
     >
       <Glyph size={16} filled={!!active && (label === 'Like' || label === 'Save')} />
       <span className="hidden sm:inline">{label}</span>
+      {typeof count === 'number' && count > 0 && (
+        <span className="hidden sm:inline" style={{ color: 'var(--muted-foreground)' }}>
+          {count}
+        </span>
+      )}
       {badge && (
         <span
           className="absolute -top-1.5 -right-1.5 px-1.5 rounded-full text-[9px] font-bold"

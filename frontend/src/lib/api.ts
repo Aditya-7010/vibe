@@ -173,4 +173,5 @@ export const feedbackApi = {
     duration?: number;
   }) => api.post('/feedback/', payload),
   saved: () => api.get('/feedback/?kind=save'),
+  counts: (videoId: string) => api.get(`/feedback/?videoId=${encodeURIComponent(videoId)}`),
 };
