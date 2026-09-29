@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useStore } from '../store';
 import { AvatarSprite, SKINS } from '../components/Avatar';
 import { ApiError, auth as authApi } from '../lib/api';
+import * as Icon from '../components/Icons';
 
 type Note = { kind: 'ok' | 'err'; text: string } | null;
 
