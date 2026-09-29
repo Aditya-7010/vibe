@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { Component, useEffect, type ReactNode } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useStore } from './store';
 import { applyThemeClass } from './lib/appearance';
@@ -26,6 +26,47 @@ function Splash() {
       </div>
     </div>
   );
+}
+
+/**
+ * Catches render crashes anywhere below it. Without this, a single thrown
+ * error unmounts the whole React tree and the user just sees a blank page
+ * with nothing in the UI to tell them what happened.
+ */
+class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error: unknown) {
+    // eslint-disable-next-line no-console
+    console.error('Unhandled render error:', error);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div
+          className="min-h-screen flex flex-col items-center justify-center gap-4 text-center px-6"
+          style={{ background: 'var(--background)' }}
+        >
+          <p className="text-lg font-bold">Something went wrong.</p>
+          <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+            Try reloading the page.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="btn-primary px-5 py-2.5 rounded-xl font-semibold text-sm"
+          >
+            Reload
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 /** Sends signed-out visitors to /auth, remembering where they were headed. */
@@ -78,6 +119,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <ErrorToast />
+      <ErrorBoundary>
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/auth" element={<Auth />} />
@@ -115,6 +157,7 @@ export default function App() {
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </ErrorBoundary>
     </BrowserRouter>
   );
 }

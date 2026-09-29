@@ -70,7 +70,18 @@ export default function Profile() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (!user) return null;
+  if (!user) {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: 'var(--background)' }}
+      >
+        <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+          Loading your profile…
+        </p>
+      </div>
+    );
+  }
 
   const saveIdentity = async () => {
     setNameNote(null);

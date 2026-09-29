@@ -232,6 +232,18 @@ class RoomConsumer(AsyncJsonWebsocketConsumer):
         await self.group_broadcast({"type": "queue", "payload": await self.get_queue()})
 
     async def do_playback_skip(self, payload):
+        """Skip the current track — the room owner/admins, or whoever's track
+        is currently playing, only. Everyone else gets an error, not a skip."""
+        if not await self.can_skip():
+            await self.send_json(
+                {
+                    "type": "error",
+                    "payload": {
+                        "detail": "Only the room owner or the current DJ can skip this track."
+                    },
+                }
+            )
+            return
         playback = await self.skip_track()
         await self.group_broadcast({"type": "playback", "payload": playback})
         await self.group_broadcast({"type": "queue", "payload": await self.get_queue()})
@@ -392,6 +404,16 @@ class RoomConsumer(AsyncJsonWebsocketConsumer):
         return bool(room and room.can_moderate(self.user))
 
     @database_sync_to_async
+    def can_skip(self):
+        """Room owner/admins can always skip; otherwise only the DJ whose
+        track is currently playing can skip their own track."""
+        room = Room.objects.filter(pk=self.room_id).first()
+        if room and room.can_moderate(self.user):
+            return True
+        playback = get_playback(room) if room else None
+        return bool(playback and str(playback.dj_id or "") == str(self.user.id))
+
+    @database_sync_to_async
     def create_message(self, kind, text, gif_url, reply_to_id=None):
         room = Room.objects.get(pk=self.room_id)
         reply_to = None
@@ -409,6 +431,14 @@ class RoomConsumer(AsyncJsonWebsocketConsumer):
             gif_url=gif_url,
             reply_to=reply_to,
         )
+        # Keep only the most recent 100 messages per room so history (and the
+        # page that renders it) doesn't grow without bound.
+        keep_ids = list(
+            Message.objects.filter(room_id=self.room_id)
+            .order_by("-created_at")
+            .values_list("id", flat=True)[:100]
+        )
+        Message.objects.filter(room_id=self.room_id).exclude(id__in=keep_ids).delete()
         return serialize_message(message, reactions={})
 
     @database_sync_to_async

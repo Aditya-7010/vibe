@@ -524,6 +524,7 @@ h1, h2, h3, h4 {
     padding: 4px 6px;
     font-size: 10px;
     gap: 4px;
+    flex: 1 1 0;
   }
   .bottom-bar .btn-ghost svg {
     width: 14px;

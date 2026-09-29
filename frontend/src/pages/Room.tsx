@@ -299,7 +299,7 @@ export default function Room() {
   }
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden" style={{ background: 'var(--background)' }}>
+    <div className="h-dvh flex flex-col overflow-hidden" style={{ background: 'var(--background)' }}>
       {/* ---------------- title bar ---------------- */}
       <header className="title-bar flex items-center gap-3 px-4 py-3 flex-shrink-0">
         <button onClick={() => navigate('/dashboard')} className="icon-btn w-9 h-9" title="Back to dashboard">
@@ -378,9 +378,11 @@ export default function Room() {
                     >
                       {mode === 'video' ? <Icon.Disc size={15} /> : <Icon.Video size={15} />}
                     </button>
-                    <button onClick={playNext} className="icon-btn w-8 h-8" title="Skip to next track">
-                      <Icon.SkipNext size={15} />
-                    </button>
+                    {(canModerate || myTurn) && (
+                      <button onClick={playNext} className="icon-btn w-8 h-8" title="Skip to next track">
+                        <Icon.SkipNext size={15} />
+                      </button>
+                    )}
                   </div>
                   <span style={{ fontFamily: 'var(--font-code)' }}>{currentSong?.durationText || '0:00'}</span>
                 </div>
@@ -664,7 +666,7 @@ function ChatPanel({
           return (
             <div
               key={m.id}
-              className="chat-message flex gap-2.5 relative group"
+              className={`chat-message flex gap-2.5 relative group ${menuFor === m.id ? 'z-40' : 'z-0'}`}
               onContextMenu={(e) => { e.preventDefault(); setMenuFor(menuFor === m.id ? null : m.id); }}
               onTouchStart={() => { pressTimer.current = setTimeout(() => setMenuFor(m.id), 480); }}
               onTouchEnd={() => clearTimeout(pressTimer.current)}
