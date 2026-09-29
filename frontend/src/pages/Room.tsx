@@ -1366,7 +1366,7 @@ function BarBtn({
       <Glyph size={16} filled={!!active && (label === 'Like' || label === 'Save')} />
       <span className="hidden sm:inline">{label}</span>
       {typeof count === 'number' && count > 0 && (
-        <span className="hidden sm:inline" style={{ color: 'var(--muted-foreground)' }}>
+        <span className="text-[10px] sm:text-xs" style={{ color: 'var(--muted-foreground)' }}>
           {count}
         </span>
       )}
