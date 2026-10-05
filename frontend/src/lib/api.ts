@@ -167,11 +167,13 @@ export const feedbackApi = {
   toggle: (payload: {
     videoId: string;
     kind: 'like' | 'dislike' | 'save';
+    turnId?: string;
     roomId?: string;
     title?: string;
     thumbnail?: string;
     duration?: number;
   }) => api.post('/feedback/', payload),
   saved: () => api.get('/feedback/?kind=save'),
-  counts: (videoId: string) => api.get(`/feedback/?videoId=${encodeURIComponent(videoId)}`),
+  counts: (videoId: string, turnId: string) =>
+    api.get(`/feedback/?videoId=${encodeURIComponent(videoId)}&turnId=${encodeURIComponent(turnId)}`),
 };

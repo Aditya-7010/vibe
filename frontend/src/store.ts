@@ -89,8 +89,10 @@ interface AppState {
   bubbleMessages: Record<string, BubbleMessage>;
   friends: string[];
   savedSongs: string[];
-  likedSongs: string[];
-  dislikedSongs: string[];
+  // Like/dislike are per-play-of-the-song, not a permanent history — so
+  // it's just "what did I do on the track that's playing right now",
+  // reset to null the instant the room moves to a new track.
+  myReaction: 'like' | 'dislike' | null;
   songFeedbackCounts: { like: number; dislike: number; save: number };
   favorites: FavoriteTrack[];
   favoritesLoaded: boolean;
@@ -149,7 +151,7 @@ interface AppState {
 
   triggerLikeEffect: () => void;
   toggleSongFeedback: (kind: 'like' | 'dislike' | 'save') => Promise<void>;
-  fetchSongFeedbackCounts: (videoId: string) => Promise<void>;
+  fetchSongFeedbackCounts: (videoId: string, turnId: string) => Promise<void>;
   loadFavorites: () => Promise<void>;
   addFavoriteToQueue: (track: FavoriteTrack) => void;
   removeFavorite: (videoId: string) => Promise<void>;
@@ -184,8 +186,9 @@ export const useStore = create<AppState>((set, get) => {
           djs: djs || [],
           playback: { ...playback, receivedAt: Date.now() },
         });
+        set({ myReaction: null });
         if (playback?.current?.videoId) {
-          get().fetchSongFeedbackCounts(playback.current.videoId);
+          get().fetchSongFeedbackCounts(playback.current.videoId, playback.current.id);
         }
         break;
       }
@@ -284,8 +287,9 @@ export const useStore = create<AppState>((set, get) => {
           return patch;
         });
         if (trackChanged) {
+          set({ myReaction: null });
           if (event.payload.current?.videoId) {
-            get().fetchSongFeedbackCounts(event.payload.current.videoId);
+            get().fetchSongFeedbackCounts(event.payload.current.videoId, event.payload.current.id);
           } else {
             set({ songFeedbackCounts: { like: 0, dislike: 0, save: 0 } });
           }
@@ -335,8 +339,7 @@ export const useStore = create<AppState>((set, get) => {
     bubbleMessages: {},
     friends: [],
     savedSongs: [],
-    likedSongs: [],
-    dislikedSongs: [],
+    myReaction: null,
     songFeedbackCounts: { like: 0, dislike: 0, save: 0 },
     favorites: [],
     favoritesLoaded: false,
@@ -658,13 +661,13 @@ export const useStore = create<AppState>((set, get) => {
       // i.e. it lasts the whole song, how ever long that is.
     },
 
-    fetchSongFeedbackCounts: async (videoId) => {
+    fetchSongFeedbackCounts: async (videoId, turnId) => {
       if (!videoId) return;
       try {
-        const data = await feedbackApi.counts(videoId);
+        const data = await feedbackApi.counts(videoId, turnId);
         // The song can change again while this request is in flight —
         // don't let a slow, stale response overwrite the current song's counts.
-        if (get().playback.current?.videoId !== videoId) return;
+        if (get().playback.current?.id !== turnId) return;
         set({ songFeedbackCounts: data.counts });
       } catch {
         /* non-critical — the buttons just show without counts */
@@ -678,27 +681,23 @@ export const useStore = create<AppState>((set, get) => {
         const data = await feedbackApi.toggle({
           videoId: song.videoId,
           kind,
+          turnId: kind !== 'save' ? song.id : undefined,
           roomId: currentRoom?.id,
           title: song.title,
           thumbnail: song.thumbnail,
           duration: song.duration,
         });
-        const key =
-          kind === 'save' ? 'savedSongs' : kind === 'like' ? 'likedSongs' : 'dislikedSongs';
         set((s) => {
-          const list = s[key] as string[];
-          const next = data.active
-            ? Array.from(new Set([...list, song.videoId]))
-            : list.filter((id) => id !== song.videoId);
-          const patch: any = { [key]: next };
+          const patch: any = {};
           if (data.counts) patch.songFeedbackCounts = data.counts;
-          if (kind === 'like' && data.active) {
-            patch.dislikedSongs = s.dislikedSongs.filter((id) => id !== song.videoId);
-          }
-          if (kind === 'dislike' && data.active) {
-            patch.likedSongs = s.likedSongs.filter((id) => id !== song.videoId);
+          if (kind === 'like' || kind === 'dislike') {
+            patch.myReaction = data.active ? kind : null;
           }
           if (kind === 'save') {
+            const next = data.active
+              ? Array.from(new Set([...s.savedSongs, song.videoId]))
+              : s.savedSongs.filter((id) => id !== song.videoId);
+            patch.savedSongs = next;
             patch.favorites = data.active
               ? [
                   {
@@ -727,6 +726,19 @@ export const useStore = create<AppState>((set, get) => {
                 ),
               }));
             }
+          }
+        }
+        // Disliking cancels whatever the like animation was doing — it
+        // doesn't make sense to keep celebrating a track you just disliked.
+        if (kind === 'dislike' && data.active) {
+          const me = get().user;
+          if (me) {
+            get().socket?.send('expression', { expression: 'neutral' });
+            set((s) => ({
+              roomAvatars: s.roomAvatars.map((a) =>
+                a.id === me.id ? { ...a, expression: 'neutral' } : a,
+              ),
+            }));
           }
         }
       } catch (err) {

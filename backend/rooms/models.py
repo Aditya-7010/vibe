@@ -382,8 +382,17 @@ class SongFeedback(models.Model):
     thumbnail = models.URLField(max_length=600, blank=True, default="")
     duration = models.PositiveIntegerField(default=0, help_text="seconds")
     kind = models.CharField(max_length=8, choices=KINDS)
+    # The specific play of the song (QueueItem id) — only set for like/dislike.
+    # Scoping to this instead of just video_id is what makes likes/dislikes
+    # start fresh every time a track plays, even if it's a replay of a song
+    # that was already liked on a previous turn. "save" leaves this blank:
+    # saving is a permanent library action and intentionally never resets.
+    turn_id = models.CharField(max_length=40, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ("user", "video_id", "kind")
+        indexes = [
+            models.Index(fields=["user", "video_id", "kind"]),
+            models.Index(fields=["user", "turn_id", "kind"]),
+        ]
         ordering = ["-created_at"]

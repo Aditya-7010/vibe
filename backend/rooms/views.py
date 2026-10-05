@@ -227,14 +227,19 @@ def song_feedback(request):
     """Like / dislike / save the current track. POST toggles."""
     if request.method == "GET":
         video_id = request.query_params.get("videoId")
+        turn_id = request.query_params.get("turnId") or ""
         if video_id:
-            # Counts for one track — how many people liked/disliked/saved it,
-            # regardless of who's asking.
+            # Like/dislike counts are scoped to this specific play of the
+            # song (turn_id), so they start at 0 every time it plays again —
+            # even if it's the same video as a previous turn. Save is
+            # scoped to the video itself since it's a permanent library
+            # action, not a per-play reaction.
             counts = {
-                kind: SongFeedback.objects.filter(video_id=video_id, kind=kind).count()
-                for kind in ("like", "dislike", "save")
+                "like": SongFeedback.objects.filter(turn_id=turn_id, kind="like").count() if turn_id else 0,
+                "dislike": SongFeedback.objects.filter(turn_id=turn_id, kind="dislike").count() if turn_id else 0,
+                "save": SongFeedback.objects.filter(video_id=video_id, kind="save").count(),
             }
-            return Response({"videoId": video_id, "counts": counts})
+            return Response({"videoId": video_id, "turnId": turn_id, "counts": counts})
         kind = request.query_params.get("kind", "save")
         items = SongFeedback.objects.filter(user=request.user, kind=kind)
         return Response(
@@ -255,30 +260,43 @@ def song_feedback(request):
 
     kind = request.data.get("kind")
     video_id = youtube.extract_video_id(request.data.get("videoId") or "")
+    turn_id = str(request.data.get("turnId") or "")
     if kind not in {"like", "dislike", "save"} or not video_id:
         return Response(
             {"detail": "Need a videoId and kind of like/dislike/save."},
             status=status.HTTP_400_BAD_REQUEST,
         )
+    if kind in {"like", "dislike"} and not turn_id:
+        return Response(
+            {"detail": "Need a turnId to like/dislike the current play of a track."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
     room = _room_or_none(request.data.get("roomId"))
-    existing = SongFeedback.objects.filter(
-        user=request.user, video_id=video_id, kind=kind
-    ).first()
+
+    # Like/dislike are scoped to this turn; save is scoped to the video
+    # itself (it's a permanent library action, not a per-play reaction).
+    lookup = dict(user=request.user, kind=kind)
+    lookup["turn_id"] = turn_id if kind in {"like", "dislike"} else ""
+    if kind == "save":
+        lookup["video_id"] = video_id
+
+    existing = SongFeedback.objects.filter(**lookup).first()
     if existing:
         existing.delete()
         active = False
     else:
         if kind in {"like", "dislike"}:
-            # Liking clears a dislike and vice versa.
+            # Liking clears a dislike and vice versa, for this turn only.
             opposite = "dislike" if kind == "like" else "like"
             SongFeedback.objects.filter(
-                user=request.user, video_id=video_id, kind=opposite
+                user=request.user, turn_id=turn_id, kind=opposite
             ).delete()
 
         SongFeedback.objects.create(
             user=request.user,
             room=room,
             video_id=video_id,
+            turn_id=turn_id if kind in {"like", "dislike"} else "",
             title=(request.data.get("title") or "")[:200],
             thumbnail=request.data.get("thumbnail") or "",
             duration=int(request.data.get("duration") or 0),
@@ -287,10 +305,11 @@ def song_feedback(request):
         active = True
 
     counts = {
-        k: SongFeedback.objects.filter(video_id=video_id, kind=k).count()
-        for k in ("like", "dislike", "save")
+        "like": SongFeedback.objects.filter(turn_id=turn_id, kind="like").count() if turn_id else 0,
+        "dislike": SongFeedback.objects.filter(turn_id=turn_id, kind="dislike").count() if turn_id else 0,
+        "save": SongFeedback.objects.filter(video_id=video_id, kind="save").count(),
     }
-    return Response({"videoId": video_id, "kind": kind, "active": active, "counts": counts})
+    return Response({"videoId": video_id, "turnId": turn_id, "kind": kind, "active": active, "counts": counts})
 
 
 @api_view(["GET"])

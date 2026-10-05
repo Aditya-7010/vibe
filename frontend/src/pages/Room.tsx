@@ -109,8 +109,7 @@ export default function Room() {
     addFriend,
     removeFriend,
     toggleSongFeedback,
-    likedSongs,
-    dislikedSongs,
+    myReaction,
     savedSongs,
     songFeedbackCounts,
     favorites,
@@ -477,14 +476,14 @@ export default function Room() {
           Glyph={Icon.Heart}
           label="Like"
           count={songFeedbackCounts.like}
-          active={!!currentSong && likedSongs.includes(currentSong.videoId)}
+          active={!!currentSong && myReaction === 'like'}
           onClick={() => toggleSongFeedback('like')}
         />
         <BarBtn
           Glyph={Icon.ThumbDown}
           label="Dislike"
           count={songFeedbackCounts.dislike}
-          active={!!currentSong && dislikedSongs.includes(currentSong.videoId)}
+          active={!!currentSong && myReaction === 'dislike'}
           onClick={() => toggleSongFeedback('dislike')}
         />
         <BarBtn
