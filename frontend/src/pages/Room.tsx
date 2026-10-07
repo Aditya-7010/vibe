@@ -160,6 +160,8 @@ export default function Room() {
   const [playerReady, setPlayerReady] = useState(false);
   const [drift, setDrift] = useState(0);
   const [mode, setMode] = useState<'video' | 'art'>('video');
+  // Actual duration read from the YT player (fallback when DB value is 0).
+  const [ytDuration, setYtDuration] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -184,6 +186,23 @@ export default function Room() {
         },
         events: {
           onReady: () => !cancelled && setPlayerReady(true),
+          onStateChange: (e: any) => {
+            if (cancelled) return;
+            const player = playerRef.current;
+            if (!player) return;
+            // Read duration once the video is cued/playing.
+            if (e.data === window.YT?.PlayerState?.PLAYING ||
+                e.data === window.YT?.PlayerState?.PAUSED ||
+                e.data === window.YT?.PlayerState?.CUED) {
+              try {
+                const d = player.getDuration?.();
+                if (d && d > 0) setYtDuration(d);
+              } catch { /* ignore */ }
+            }
+            // Video ended (state === 0) — do nothing, let the server tick
+            // advance the queue. The drift-correction loop won't force
+            // playVideo() any more, so no restart loop.
+          },
         },
       });
     });
@@ -228,6 +247,8 @@ export default function Room() {
   useEffect(() => {
     const player = playerRef.current;
     if (!player || !playerReady || !videoId) return;
+    // Reset the cached YT duration when the track changes.
+    setYtDuration(0);
     try {
       player.loadVideoById({ videoId, startSeconds: Math.max(0, getPlaybackPosition()) });
       player.mute();
@@ -253,7 +274,8 @@ export default function Room() {
     }
   }, [isMuted, playerReady]);
 
-  /** Drift correction — the thing that makes "synced" actually true. */
+  /** Drift indicator — tracks how far we are from the server clock.
+   * Auto-seek / auto-resume is intentionally disabled; use the Sync button. */
   useEffect(() => {
     const timer = setInterval(() => {
       const player = playerRef.current;
@@ -261,17 +283,16 @@ export default function Room() {
       try {
         const target = getPlaybackPosition();
         const actual = player.getCurrentTime() || 0;
-        const delta = actual - target;
-        setDrift(delta);
-        if (Math.abs(delta) > DRIFT_TOLERANCE) player.seekTo(target, true);
-        // Covers a local pause: the server says we're playing, so we play.
-        if (playback.isPlaying && player.getPlayerState?.() !== 1) player.playVideo();
+        setDrift(actual - target);
+        // Also refresh duration from the player if the DB value is missing.
+        const d = player.getDuration?.();
+        if (d && d > 0) setYtDuration((prev) => (prev === d ? prev : d));
       } catch {
         /* the player swallows calls made mid-load */
       }
     }, 3000);
     return () => clearInterval(timer);
-  }, [playerReady, videoId, playback.isPlaying, getPlaybackPosition]);
+  }, [playerReady, videoId, getPlaybackPosition]);
 
   /* Ticking position for the progress bar. */
   const [position, setPosition] = useState(0);
@@ -280,7 +301,8 @@ export default function Room() {
     return () => clearInterval(timer);
   }, [getPlaybackPosition]);
 
-  const duration = currentSong?.duration || 0;
+  // Prefer the DB-stored duration; fall back to what the YT player reports.
+  const duration = currentSong?.duration || ytDuration || 0;
   const progress = duration ? Math.min(100, (position / duration) * 100) : 0;
 
   /* ---------------------------------------------------------------- */
@@ -474,27 +496,32 @@ export default function Room() {
 
       {/* ---------------- bottom bar ---------------- */}
       <footer className="bottom-bar flex items-center justify-center gap-1.5 sm:gap-3 px-3 py-2.5 flex-shrink-0">
-        <BarBtn
-          Glyph={Icon.Heart}
-          label="Like"
-          count={songFeedbackCounts.like}
-          active={!!currentSong && myReaction === 'like'}
-          onClick={() => toggleSongFeedback('like')}
-        />
-        <BarBtn
-          Glyph={Icon.ThumbDown}
-          label="Dislike"
-          count={songFeedbackCounts.dislike}
-          active={!!currentSong && myReaction === 'dislike'}
-          onClick={() => toggleSongFeedback('dislike')}
-        />
-        <BarBtn
-          Glyph={Icon.Bookmark}
-          label="Save"
-          count={songFeedbackCounts.save}
-          active={!!currentSong && mySaved}
-          onClick={() => toggleSongFeedback('save')}
-        />
+        {/* Feedback buttons are hidden for the current DJ — you can't react to your own song. */}
+        {!myTurn && (
+          <>
+            <BarBtn
+              Glyph={Icon.Heart}
+              label="Like"
+              count={songFeedbackCounts.like}
+              active={!!currentSong && myReaction === 'like'}
+              onClick={() => toggleSongFeedback('like')}
+            />
+            <BarBtn
+              Glyph={Icon.ThumbDown}
+              label="Dislike"
+              count={songFeedbackCounts.dislike}
+              active={!!currentSong && myReaction === 'dislike'}
+              onClick={() => toggleSongFeedback('dislike')}
+            />
+            <BarBtn
+              Glyph={Icon.Bookmark}
+              label="Save"
+              count={songFeedbackCounts.save}
+              active={!!currentSong && mySaved}
+              onClick={() => toggleSongFeedback('save')}
+            />
+          </>
+        )}
         <div className="w-px h-7 mx-1" style={{ background: 'var(--border)' }} />
         <BarBtn Glyph={Icon.Chat} label="Chat" active={chatOpen} onClick={toggleChat} />
         <BarBtn
