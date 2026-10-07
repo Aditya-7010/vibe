@@ -121,7 +121,7 @@ class DJSlot(models.Model):
 
 
 class Message(models.Model):
-    KINDS = [("text", "Text"), ("gif", "Gif")]
+    KINDS = [("text", "Text"), ("gif", "Gif"), ("image", "Image")]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     room = models.ForeignKey(Room, on_delete=models.CASCADE, related_name="messages")
@@ -136,6 +136,12 @@ class Message(models.Model):
     kind = models.CharField(max_length=8, choices=KINDS, default="text")
     text = models.TextField(max_length=280, blank=True, default="")
     gif_url = models.URLField(max_length=600, blank=True, default="")
+    # A photo the user sent, as a compressed base64 data URL rather than a
+    # file on disk — Render's free-tier disk doesn't persist across
+    # deploys, so a normal file upload would quietly vanish the next time
+    # the service redeploys. Kept small (see MAX_IMAGE_DATA_LENGTH in
+    # views.py / consumers.py) since it's stored directly in the database.
+    image_data = models.TextField(blank=True, default="")
     reply_to = models.ForeignKey(
         "self",
         on_delete=models.SET_NULL,
