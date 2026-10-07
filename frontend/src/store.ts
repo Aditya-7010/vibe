@@ -89,10 +89,11 @@ interface AppState {
   bubbleMessages: Record<string, BubbleMessage>;
   friends: string[];
   savedSongs: string[];
-  // Like/dislike are per-play-of-the-song, not a permanent history — so
+  // Like/dislike/save are per-play-of-the-song, not a permanent history — so
   // it's just "what did I do on the track that's playing right now",
-  // reset to null the instant the room moves to a new track.
+  // reset the instant the room moves to a new track.
   myReaction: 'like' | 'dislike' | null;
+  mySaved: boolean;
   songFeedbackCounts: { like: number; dislike: number; save: number };
   favorites: FavoriteTrack[];
   favoritesLoaded: boolean;
@@ -191,9 +192,11 @@ export const useStore = create<AppState>((set, get) => {
           djs: djs || [],
           playback: { ...playback, receivedAt: Date.now() },
         });
-        set({ myReaction: null });
+        set({ myReaction: null, mySaved: false });
         if (playback?.current?.videoId) {
           get().fetchSongFeedbackCounts(playback.current.videoId, playback.current.id);
+        } else {
+          set({ songFeedbackCounts: { like: 0, dislike: 0, save: 0 } });
         }
         break;
       }
@@ -292,7 +295,7 @@ export const useStore = create<AppState>((set, get) => {
           return patch;
         });
         if (trackChanged) {
-          set({ myReaction: null });
+          set({ myReaction: null, mySaved: false });
           if (event.payload.current?.videoId) {
             get().fetchSongFeedbackCounts(event.payload.current.videoId, event.payload.current.id);
           } else {
@@ -345,6 +348,7 @@ export const useStore = create<AppState>((set, get) => {
     friends: [],
     savedSongs: [],
     myReaction: null,
+    mySaved: false,
     songFeedbackCounts: { like: 0, dislike: 0, save: 0 },
     favorites: [],
     favoritesLoaded: false,
@@ -674,7 +678,12 @@ export const useStore = create<AppState>((set, get) => {
         // The song can change again while this request is in flight —
         // don't let a slow, stale response overwrite the current song's counts.
         if (get().playback.current?.id !== turnId) return;
-        set({ songFeedbackCounts: data.counts });
+        const patch: any = { songFeedbackCounts: data.counts };
+        if (data.userFeedback) {
+          patch.myReaction = data.userFeedback.like ? 'like' : data.userFeedback.dislike ? 'dislike' : null;
+          patch.mySaved = !!data.userFeedback.save;
+        }
+        set(patch);
       } catch {
         /* non-critical — the buttons just show without counts */
       }
@@ -687,7 +696,7 @@ export const useStore = create<AppState>((set, get) => {
         const data = await feedbackApi.toggle({
           videoId: song.videoId,
           kind,
-          turnId: kind !== 'save' ? song.id : undefined,
+          turnId: song.id,
           roomId: currentRoom?.id,
           title: song.title,
           thumbnail: song.thumbnail,
@@ -700,6 +709,7 @@ export const useStore = create<AppState>((set, get) => {
             patch.myReaction = data.active ? kind : null;
           }
           if (kind === 'save') {
+            patch.mySaved = data.active;
             const next = data.active
               ? Array.from(new Set([...s.savedSongs, song.videoId]))
               : s.savedSongs.filter((id) => id !== song.videoId);
@@ -772,10 +782,13 @@ export const useStore = create<AppState>((set, get) => {
 
     removeFavorite: async (videoId) => {
       const previous = get().favorites;
-      set((s) => ({ favorites: s.favorites.filter((f) => f.videoId !== videoId) }));
+      set((s) => ({
+        favorites: s.favorites.filter((f) => f.videoId !== videoId),
+        savedSongs: s.savedSongs.filter((id) => id !== videoId),
+        mySaved: get().playback.current?.videoId === videoId ? false : s.mySaved,
+      }));
       try {
         await feedbackApi.toggle({ videoId, kind: 'save' });
-        set((s) => ({ savedSongs: s.savedSongs.filter((id) => id !== videoId) }));
       } catch (err) {
         set({ favorites: previous, error: err instanceof ApiError ? err.message : 'Could not remove that.' });
       }

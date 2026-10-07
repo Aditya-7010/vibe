@@ -180,7 +180,11 @@ def room_queue_view(request, room_id):
         duration = duration or int(info.get("duration") or 0)
         thumbnail = thumbnail or info.get("thumbnail") or ""
 
-    last = room.queue_items.order_by("-position").first()
+    playback = get_playback(room)
+    waiting_qs = room.queue_items.filter(played=False)
+    if playback.item_id:
+        waiting_qs = waiting_qs.exclude(pk=playback.item_id)
+    first = waiting_qs.order_by("position", "created_at").first()
     item = QueueItem.objects.create(
         room=room,
         video_id=video_id,
@@ -189,9 +193,8 @@ def room_queue_view(request, room_id):
         duration=duration,
         added_by=request.user,
         added_by_name=request.user.username,
-        position=(last.position + 1) if last else 0,
+        position=(first.position - 1) if first else 0,
     )
-    playback = get_playback(room)
     playback.ensure_current()
     return Response(serialize_queue_item(item), status=status.HTTP_201_CREATED)
 
@@ -229,34 +232,38 @@ def song_feedback(request):
         video_id = request.query_params.get("videoId")
         turn_id = request.query_params.get("turnId") or ""
         if video_id:
-            # Like/dislike counts are scoped to this specific play of the
-            # song (turn_id), so they start at 0 every time it plays again —
-            # even if it's the same video as a previous turn. Save is
-            # scoped to the video itself since it's a permanent library
-            # action, not a per-play reaction.
+            # Feedback counts are scoped to this specific play of the song (turn_id),
+            # so like, dislike, and save all start at 0 every time it plays again.
             counts = {
                 "like": SongFeedback.objects.filter(turn_id=turn_id, kind="like").count() if turn_id else 0,
                 "dislike": SongFeedback.objects.filter(turn_id=turn_id, kind="dislike").count() if turn_id else 0,
-                "save": SongFeedback.objects.filter(video_id=video_id, kind="save").count(),
+                "save": SongFeedback.objects.filter(turn_id=turn_id, kind="save").count() if turn_id else 0,
             }
-            return Response({"videoId": video_id, "turnId": turn_id, "counts": counts})
+            user_feedback = {
+                "like": SongFeedback.objects.filter(user=request.user, turn_id=turn_id, kind="like").exists() if turn_id else False,
+                "dislike": SongFeedback.objects.filter(user=request.user, turn_id=turn_id, kind="dislike").exists() if turn_id else False,
+                "save": SongFeedback.objects.filter(user=request.user, turn_id=turn_id, kind="save").exists() if turn_id else False,
+            }
+            return Response({"videoId": video_id, "turnId": turn_id, "counts": counts, "userFeedback": user_feedback})
         kind = request.query_params.get("kind", "save")
         items = SongFeedback.objects.filter(user=request.user, kind=kind)
-        return Response(
-            {
-                "results": [
-                    {
-                        "videoId": item.video_id,
-                        "title": item.title,
-                        "thumbnail": item.thumbnail,
-                        "duration": item.duration,
-                        "kind": item.kind,
-                        "createdAt": int(item.created_at.timestamp() * 1000),
-                    }
-                    for item in items
-                ]
-            }
-        )
+        seen_videos = set()
+        results = []
+        for item in items:
+            if item.video_id in seen_videos:
+                continue
+            seen_videos.add(item.video_id)
+            results.append(
+                {
+                    "videoId": item.video_id,
+                    "title": item.title,
+                    "thumbnail": item.thumbnail,
+                    "duration": item.duration,
+                    "kind": item.kind,
+                    "createdAt": int(item.created_at.timestamp() * 1000),
+                }
+            )
+        return Response({"results": results})
 
     kind = request.data.get("kind")
     video_id = youtube.extract_video_id(request.data.get("videoId") or "")
@@ -273,11 +280,10 @@ def song_feedback(request):
         )
     room = _room_or_none(request.data.get("roomId"))
 
-    # Like/dislike are scoped to this turn; save is scoped to the video
-    # itself (it's a permanent library action, not a per-play reaction).
     lookup = dict(user=request.user, kind=kind)
-    lookup["turn_id"] = turn_id if kind in {"like", "dislike"} else ""
-    if kind == "save":
+    if turn_id:
+        lookup["turn_id"] = turn_id
+    else:
         lookup["video_id"] = video_id
 
     existing = SongFeedback.objects.filter(**lookup).first()
@@ -296,7 +302,7 @@ def song_feedback(request):
             user=request.user,
             room=room,
             video_id=video_id,
-            turn_id=turn_id if kind in {"like", "dislike"} else "",
+            turn_id=turn_id,
             title=(request.data.get("title") or "")[:200],
             thumbnail=request.data.get("thumbnail") or "",
             duration=int(request.data.get("duration") or 0),
@@ -307,7 +313,7 @@ def song_feedback(request):
     counts = {
         "like": SongFeedback.objects.filter(turn_id=turn_id, kind="like").count() if turn_id else 0,
         "dislike": SongFeedback.objects.filter(turn_id=turn_id, kind="dislike").count() if turn_id else 0,
-        "save": SongFeedback.objects.filter(video_id=video_id, kind="save").count(),
+        "save": SongFeedback.objects.filter(turn_id=turn_id, kind="save").count() if turn_id else 0,
     }
     return Response({"videoId": video_id, "turnId": turn_id, "kind": kind, "active": active, "counts": counts})
 

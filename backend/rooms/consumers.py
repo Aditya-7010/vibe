@@ -525,7 +525,11 @@ class RoomConsumer(AsyncJsonWebsocketConsumer):
             duration = duration or int(info.get("duration") or 0)
             thumbnail = thumbnail or info.get("thumbnail") or ""
         room = Room.objects.get(pk=self.room_id)
-        last = room.queue_items.order_by("-position").first()
+        playback = get_playback(room)
+        waiting_qs = room.queue_items.filter(played=False)
+        if playback.item_id:
+            waiting_qs = waiting_qs.exclude(pk=playback.item_id)
+        first = waiting_qs.order_by("position", "created_at").first()
         item = QueueItem.objects.create(
             room=room,
             video_id=video_id,
@@ -534,7 +538,7 @@ class RoomConsumer(AsyncJsonWebsocketConsumer):
             duration=duration,
             added_by=self.user,
             added_by_name=self.user.username,
-            position=(last.position + 1) if last else 0,
+            position=(first.position - 1) if first else 0,
         )
         return str(item.id)
 

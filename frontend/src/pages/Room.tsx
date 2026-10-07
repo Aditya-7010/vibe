@@ -111,6 +111,7 @@ export default function Room() {
     removeFriend,
     toggleSongFeedback,
     myReaction,
+    mySaved,
     savedSongs,
     songFeedbackCounts,
     favorites,
@@ -491,7 +492,7 @@ export default function Room() {
           Glyph={Icon.Bookmark}
           label="Save"
           count={songFeedbackCounts.save}
-          active={!!currentSong && savedSongs.includes(currentSong.videoId)}
+          active={!!currentSong && mySaved}
           onClick={() => toggleSongFeedback('save')}
         />
         <div className="w-px h-7 mx-1" style={{ background: 'var(--border)' }} />
@@ -623,7 +624,7 @@ function ChatPanel({
   messages: any[];
   meId: string;
   canModerate: boolean;
-  onSend: (text: string, type?: 'text' | 'gif', gifUrl?: string, replyTo?: string | null) => void;
+  onSend: (text: string, type?: 'text' | 'gif' | 'image', gifUrl?: string, replyTo?: string | null) => void;
   onEdit: (id: string, text: string) => void;
   onDelete: (id: string) => void;
   onReact: (id: string, emoji: string) => void;
@@ -687,7 +688,7 @@ function ChatPanel({
     <div className="flex flex-col h-full min-h-0">
       <PanelHeader title="Chat" Glyph={Icon.Chat} onClose={onClose} />
 
-      <div className="flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-3 min-h-0">
+      <div className="flex-1 overflow-y-auto px-3 py-3 flex flex-col min-h-0">
         {messages.length === 0 && (
           <p className="text-sm text-center py-8" style={{ color: 'var(--muted-foreground)' }}>
             Nothing said yet. Say hello.
@@ -710,16 +711,20 @@ function ChatPanel({
           return (
             <div
               key={m.id}
-              className={`chat-message flex gap-2.5 relative group ${menuFor === m.id ? 'z-40' : 'z-0'}`}
+              className={`chat-message flex gap-2.5 relative group ${menuFor === m.id ? 'z-40' : 'z-0'} ${
+                i === 0 ? '' : grouped ? 'mt-1' : 'mt-3'
+              }`}
               onContextMenu={(e) => { e.preventDefault(); setMenuFor(menuFor === m.id ? null : m.id); }}
               onTouchStart={() => { pressTimer.current = setTimeout(() => setMenuFor(m.id), 480); }}
               onTouchEnd={() => clearTimeout(pressTimer.current)}
             >
-              <div className="flex-shrink-0 pt-0.5" style={grouped ? { visibility: 'hidden', height: 0, overflow: 'hidden' } : undefined}>
-                {m.avatarImage ? (
-                  <img src={m.avatarImage} alt="" className="w-7 h-7 rounded-full object-cover" />
-                ) : (
-                  <AvatarSprite skin={m.avatarSkin} size={28} faceOnly />
+              <div className="w-7 flex-shrink-0 pt-0.5">
+                {!grouped && (
+                  m.avatarImage ? (
+                    <img src={m.avatarImage} alt="" className="w-7 h-7 rounded-full object-cover" />
+                  ) : (
+                    <AvatarSprite skin={m.avatarSkin} size={28} faceOnly />
+                  )
                 )}
               </div>
 
