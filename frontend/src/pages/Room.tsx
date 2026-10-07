@@ -1090,7 +1090,13 @@ function QueuePanel({
   const dragItem = useRef<string | null>(null);
   const dragDj = useRef<number | null>(null);
 
-  /* Search fires as you type — no enter key needed. */
+  /* Helper: does this string look like a YouTube URL or bare video ID? */
+  const isYouTubeUrl = (s: string) =>
+    /youtu\.be\/|youtube\.com\/|^[A-Za-z0-9_-]{11}$/.test(s);
+
+  /* Search fires as you type — no enter key needed.
+     If the input looks like a YouTube link, we do a direct lookup
+     instead of a search so we get the exact video immediately. */
   useEffect(() => {
     const q = query.trim();
     if (q.length < 2) {
@@ -1098,6 +1104,18 @@ function QueuePanel({
       return;
     }
     const controller = new AbortController();
+    if (isYouTubeUrl(q)) {
+      // Direct URL / video ID — resolve immediately, no debounce
+      setSearching(true);
+      searchApi.youtubeLookup(q, controller.signal)
+        .then((info: any) => {
+          if (info && info.videoId) setResults([info]);
+          else setResults([]);
+        })
+        .catch(() => { /* aborted or offline */ })
+        .finally(() => setSearching(false));
+      return () => { controller.abort(); };
+    }
     const timer = setTimeout(async () => {
       setSearching(true);
       try {
@@ -1360,7 +1378,7 @@ function QueuePanel({
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search YouTube…"
+              placeholder="Search YouTube or paste a link…"
               className="input-field w-full pl-9 pr-3 py-2.5 rounded-xl text-sm"
             />
           </div>

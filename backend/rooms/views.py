@@ -210,6 +210,26 @@ def search_youtube(request):
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
+def lookup_youtube(request):
+    """Resolve a YouTube URL or video ID to its metadata (title, duration, etc.)."""
+    url = request.query_params.get("url", "")
+    video_id = youtube.extract_video_id(url)
+    if not video_id:
+        return Response(
+            {"detail": "Could not extract a video ID from the provided URL."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    info = youtube.lookup(video_id)
+    if not info:
+        return Response(
+            {"detail": "Video not found."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    return Response(info)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
 def search_gifs(request):
     query = request.query_params.get("q", "")
     featured = request.query_params.get("featured") in {"1", "true", "yes"}

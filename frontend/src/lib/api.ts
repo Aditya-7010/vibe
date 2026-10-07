@@ -159,6 +159,8 @@ export const roomsApi = {
 export const searchApi = {
   youtube: (q: string, signal?: AbortSignal) =>
     api.get(`/search/youtube/?q=${encodeURIComponent(q)}`, signal),
+  youtubeLookup: (url: string, signal?: AbortSignal) =>
+    api.get(`/search/youtube/lookup/?url=${encodeURIComponent(url)}`, signal),
   gifs: (q: string, signal?: AbortSignal) =>
     api.get(`/search/gifs/?q=${encodeURIComponent(q)}`, signal),
 };

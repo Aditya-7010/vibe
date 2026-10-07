@@ -9,6 +9,7 @@ urlpatterns = [
     path("rooms/<uuid:room_id>/messages/", views.room_messages, name="room-messages"),
     path("rooms/<uuid:room_id>/queue/", views.room_queue_view, name="room-queue"),
     path("search/youtube/", views.search_youtube, name="search-youtube"),
+    path("search/youtube/lookup/", views.lookup_youtube, name="lookup-youtube"),
     path("search/gifs/", views.search_gifs, name="search-gifs"),
     path("feedback/", views.song_feedback, name="song-feedback"),
     path("health/", views.health, name="health"),
