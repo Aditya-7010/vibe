@@ -1,10 +1,15 @@
 """
-GIF search without your own key.
+GIF search.
 
-Tries, in order: your Tenor key if you ever add one, Tenor's long-standing
-anonymous demo key, then Giphy's public beta key. If every provider is blocked
-the API returns an empty list plus a hint, and the UI falls back to letting
-people paste an image/GIF URL directly — so chat never hard-depends on a key.
+Tenor's public API was permanently shut down by Google on June 30, 2026 —
+every key that worked against it, including anonymous demo keys, now
+returns errors with no fix available. Giphy is the only provider here now.
+
+Set GIPHY_API_KEY (Render -> Environment) to your own free key from
+developers.giphy.com for a much higher rate limit than the shared public
+beta key this falls back to. If no provider is reachable, the API returns
+an empty list plus a hint, and the UI lets people paste an image/GIF URL
+directly instead -- so chat never hard-depends on this working.
 """
 
 import hashlib
@@ -16,10 +21,9 @@ from django.core.cache import cache
 
 log = logging.getLogger(__name__)
 
-TIMEOUT = 6
+TIMEOUT = 10
 CACHE_SECONDS = 600
-TENOR_ANON_KEY = "LIVDSRZULELA"  # public demo key, no signup
-GIPHY_BETA_KEY = "dc6zaTOxFJmzC"  # public beta key, no signup
+GIPHY_BETA_KEY = "dc6zaTOxFJmzC"  # Giphy's shared public beta key, no signup -- low rate limit
 
 FEATURED_QUERIES = ["music", "dancing", "party", "vibe", "headphones"]
 
@@ -28,53 +32,11 @@ def _item(gif_url, preview_url=None):
     return {"url": gif_url, "preview": preview_url or gif_url}
 
 
-def _from_tenor_v2(query, limit):
-    key = settings.TENOR_API_KEY
-    if not key:
-        return []
-    response = requests.get(
-        "https://tenor.googleapis.com/v2/search",
-        params={
-            "q": query,
-            "key": key,
-            "limit": limit,
-            "media_filter": "tinygif,gif",
-            "client_key": "vibe",
-        },
-        timeout=TIMEOUT,
-    )
-    response.raise_for_status()
-    results = []
-    for item in response.json().get("results", []):
-        media = item.get("media_formats", {})
-        url = (media.get("gif") or {}).get("url")
-        preview = (media.get("tinygif") or {}).get("url")
-        if url:
-            results.append(_item(url, preview))
-    return results
-
-
-def _from_tenor_v1(query, limit):
-    response = requests.get(
-        "https://g.tenor.com/v1/search",
-        params={"q": query, "key": TENOR_ANON_KEY, "limit": limit},
-        timeout=TIMEOUT,
-    )
-    response.raise_for_status()
-    results = []
-    for item in response.json().get("results", []):
-        media = (item.get("media") or [{}])[0]
-        url = (media.get("gif") or {}).get("url")
-        preview = (media.get("tinygif") or {}).get("url")
-        if url:
-            results.append(_item(url, preview))
-    return results
-
-
 def _from_giphy(query, limit):
+    key = settings.GIPHY_API_KEY or GIPHY_BETA_KEY
     response = requests.get(
         "https://api.giphy.com/v1/gifs/search",
-        params={"q": query, "api_key": GIPHY_BETA_KEY, "limit": limit, "rating": "pg"},
+        params={"q": query, "api_key": key, "limit": limit, "rating": "pg"},
         timeout=TIMEOUT,
     )
     response.raise_for_status()
@@ -89,9 +51,7 @@ def _from_giphy(query, limit):
 
 
 PROVIDERS = [
-    ("tenor", _from_tenor_v2),
-    ("tenor-anon", _from_tenor_v1),
-    ("giphy-beta", _from_giphy),
+    ("giphy", _from_giphy),
 ]
 
 

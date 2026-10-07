@@ -196,7 +196,9 @@ EXPOSE_VERIFY_LINK = env_bool("EXPOSE_VERIFY_LINK", not bool(EMAIL_HOST))
 # --------------------------------------------------------------------------
 # Optional third-party keys — all genuinely optional
 # --------------------------------------------------------------------------
-TENOR_API_KEY = os.environ.get("TENOR_API_KEY", "")
+# Tenor's API was permanently shut down by Google on June 30, 2026 — no key,
+# anonymous or otherwise, works against it anymore. Giphy is the live provider now.
+GIPHY_API_KEY = os.environ.get("GIPHY_API_KEY", "")
 YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY", "")
 PIPED_INSTANCES = env_list(
     "PIPED_INSTANCES",
