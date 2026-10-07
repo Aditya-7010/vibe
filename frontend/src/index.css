@@ -159,10 +159,20 @@ h1, h2, h3, h4 {
  * Animation
  * ------------------------------------------------------------------ */
 
+/* The "liked this song" dance — a proper little groove, not just a bop:
+   bounce, lean, a hip-sway wiggle, repeating for as long as the track
+   is liked. Stops the instant the like is removed or the track changes,
+   since that's just the CSS class being taken off the element. */
 @keyframes bop {
-  0%, 100% { transform: translateY(0); }
-  25% { transform: translateY(-9px) rotate(-2deg); }
-  75% { transform: translateY(-4px) rotate(2deg); }
+  0%   { transform: translateY(0)    rotate(0deg)  scale(1, 1); }
+  12%  { transform: translateY(-11px) rotate(-7deg) scale(0.97, 1.04); }
+  25%  { transform: translateY(-2px)  rotate(5deg)  scale(1.03, 0.97); }
+  37%  { transform: translateY(-9px)  rotate(-4deg) scale(0.98, 1.03); }
+  50%  { transform: translateY(0)     rotate(6deg)  scale(1.02, 0.98); }
+  62%  { transform: translateY(-11px) rotate(-6deg) scale(0.97, 1.04); }
+  75%  { transform: translateY(-2px)  rotate(4deg)  scale(1.03, 0.97); }
+  87%  { transform: translateY(-7px)  rotate(-3deg) scale(0.99, 1.02); }
+  100% { transform: translateY(0)    rotate(0deg)  scale(1, 1); }
 }
 @keyframes idleSway {
   0%, 100% { transform: translateY(0) rotate(0deg); }
@@ -189,7 +199,7 @@ h1, h2, h3, h4 {
   50% { opacity: 0.35; }
 }
 
-.avatar-bop { animation: bop 0.62s ease-in-out infinite; transform-origin: 50% 90%; }
+.avatar-bop { animation: bop 0.9s ease-in-out infinite; transform-origin: 50% 92%; }
 .avatar-idle { animation: idleSway 4.5s ease-in-out infinite; transform-origin: 50% 90%; }
 .bubble-enter { animation: fadeInUp 0.2s ease forwards; }
 .bubble-exit { animation: fadeOutUp 0.3s ease forwards; }

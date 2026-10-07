@@ -70,7 +70,10 @@ export const AvatarSprite: React.FC<AvatarSpriteProps> = ({
   const uid = useId().replace(/:/g, '');
 
   const ink = 'rgba(28,20,34,0.82)';
-  const bopping = showBop && expression === 'bop';
+  // Any "liked it" expression dances, not just the literal 'bop' setting —
+  // 'happy' is the default like-effect, so most people would otherwise
+  // never see the avatar actually move when they like a song.
+  const bopping = showBop && (expression === 'bop' || expression === 'happy');
 
   /* Eyes ---------------------------------------------------------------- */
   const eyes = (() => {

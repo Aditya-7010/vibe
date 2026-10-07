@@ -25,6 +25,10 @@ class User(AbstractUser):
 
     # Appearance / gameplay preferences (mirrors the Settings page)
     avatar_skin = models.PositiveSmallIntegerField(default=0)
+    # Compressed base64 data URL, same reasoning as Message.image_data —
+    # no persistent disk to put an uploaded file on. Blank means "use the
+    # sprite avatar" everywhere this is checked.
+    profile_image = models.TextField(blank=True, default="")
     like_effect = models.CharField(max_length=16, choices=LIKE_EFFECTS, default="happy")
     theme = models.CharField(max_length=8, default="dark")
     accent_color = models.CharField(max_length=16, default="purple")

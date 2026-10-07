@@ -127,7 +127,12 @@ interface AppState {
   toggleMute: () => void;
   setBubblesEnabled: (on: boolean) => void;
 
-  sendChatMessage: (text: string, type?: 'text' | 'gif', gifUrl?: string, replyTo?: string | null) => void;
+  sendChatMessage: (
+    text: string,
+    type?: 'text' | 'gif' | 'image',
+    media?: string,
+    replyTo?: string | null,
+  ) => void;
   editMessage: (id: string, text: string) => void;
   deleteMessage: (id: string) => void;
   addReaction: (id: string, emoji: string) => void;
@@ -571,8 +576,9 @@ export const useStore = create<AppState>((set, get) => {
     setError: (message) => set({ error: message }),
 
     /* ---------------- chat ---------------- */
-    sendChatMessage: (text, type = 'text', gifUrl, replyTo) => {
-      const payload: any = type === 'gif' ? { gifUrl } : { text };
+    sendChatMessage: (text, type = 'text', media, replyTo) => {
+      const payload: any =
+        type === 'gif' ? { gifUrl: media } : type === 'image' ? { imageData: media } : { text };
       if (replyTo) payload.replyTo = replyTo;
       get().socket?.send('chat', payload);
     },

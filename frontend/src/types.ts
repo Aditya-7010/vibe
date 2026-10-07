@@ -7,6 +7,8 @@ export interface User {
   username: string;
   email: string;
   avatarSkin: number;
+  /** A profile picture (data URL), if the user has uploaded one. Empty string means "use the sprite avatar". */
+  profileImage?: string;
   likeEffect: LikeEffect;
   theme: Theme;
   accentColor: string;
@@ -45,9 +47,13 @@ export interface ChatMessage {
   userId: string;
   username: string;
   avatarSkin: number;
+  /** A profile picture (data URL) if the sender has one set — shown instead of the sprite face when present. */
+  avatarImage?: string;
   text: string;
-  type: 'text' | 'gif';
+  type: 'text' | 'gif' | 'image';
   gifUrl?: string;
+  /** A photo the user sent, as a data URL. */
+  imageData?: string;
   timestamp: number;
   edited?: boolean;
   deleted?: boolean;

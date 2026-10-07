@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useStore } from '../store';
 import { AvatarSprite, SKINS } from '../components/Avatar';
 import { ApiError, auth as authApi } from '../lib/api';
+import { compressImageFile } from '../lib/image';
 import * as Icon from '../components/Icons';
 
 type Note = { kind: 'ok' | 'err'; text: string } | null;
@@ -16,6 +17,9 @@ export default function Profile() {
   const [username, setUsername] = useState(user?.username || '');
   const [skin, setSkin] = useState(user?.avatarSkin ?? 0);
   const [nameNote, setNameNote] = useState<Note>(null);
+  const [photoNote, setPhotoNote] = useState<Note>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const [savingName, setSavingName] = useState(false);
 
   const [newEmail, setNewEmail] = useState('');
@@ -216,11 +220,61 @@ export default function Profile() {
         {/* Identity */}
         <Section title="Who you are" Glyph={Icon.User}>
           <div className="flex items-center gap-5 mb-6">
-            <div
-              className="rounded-2xl p-4 flex items-center justify-center"
-              style={{ background: 'var(--secondary)', border: '1px solid var(--border)' }}
-            >
-              <AvatarSprite skin={skin} size={110} />
+            <div className="relative flex-shrink-0">
+              <div
+                className="rounded-2xl p-4 flex items-center justify-center overflow-hidden"
+                style={{ background: 'var(--secondary)', border: '1px solid var(--border)', width: 110, height: 110 }}
+              >
+                {user.profileImage ? (
+                  <img src={user.profileImage} alt="" className="w-full h-full object-cover -m-4" style={{ width: 'calc(100% + 32px)', height: 'calc(100% + 32px)' }} />
+                ) : (
+                  <AvatarSprite skin={skin} size={110} />
+                )}
+              </div>
+              <button
+                onClick={() => photoInputRef.current?.click()}
+                className="icon-btn w-8 h-8 absolute -bottom-2 -right-2 rounded-full"
+                style={{ background: 'var(--primary)', color: 'white' }}
+                title={user.profileImage ? 'Change photo' : 'Add a profile photo'}
+                disabled={uploadingPhoto}
+              >
+                <Icon.Image size={14} />
+              </button>
+              {user.profileImage && (
+                <button
+                  onClick={() => {
+                    setPhotoNote(null);
+                    updateProfile({ profileImage: '' }).catch(() =>
+                      setPhotoNote({ kind: 'err', text: 'Could not remove the photo — try again.' }),
+                    );
+                  }}
+                  className="icon-btn w-8 h-8 absolute -bottom-2 left-1/2 -translate-x-1/2 rounded-full text-[10px]"
+                  title="Remove photo, use avatar instead"
+                >
+                  <Icon.Close size={12} />
+                </button>
+              )}
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = '';
+                  if (!file) return;
+                  setUploadingPhoto(true);
+                  try {
+                    const dataUrl = await compressImageFile(file, { maxDimension: 400, quality: 0.75 });
+                    await updateProfile({ profileImage: dataUrl });
+                    setPhotoNote(null);
+                  } catch {
+                    setPhotoNote({ kind: 'err', text: "Couldn't use that photo — try a different one." });
+                  } finally {
+                    setUploadingPhoto(false);
+                  }
+                }}
+              />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-lg font-bold truncate" style={{ fontFamily: 'var(--font-head)' }}>
@@ -242,6 +296,7 @@ export default function Profile() {
               </span>
             </div>
           </div>
+          <Note note={photoNote} />
 
           <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--muted-foreground)' }}>
             Display name

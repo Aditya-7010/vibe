@@ -4,6 +4,7 @@ import { useStore } from '../store';
 import { AvatarSprite } from '../components/Avatar';
 import * as Icon from '../components/Icons';
 import { searchApi } from '../lib/api';
+import { compressImageFile } from '../lib/image';
 import { GifResult, SearchResult } from '../types';
 
 declare global {
@@ -588,7 +589,7 @@ function StageAvatar({
           skin={avatar.avatarSkin}
           size={size}
           expression={avatar.expression}
-          showBop={avatar.expression === 'bop'}
+          showBop={avatar.expression === 'bop' || avatar.expression === 'happy'}
         />
       </button>
 
@@ -632,6 +633,22 @@ function ChatPanel({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<any | null>(null);
   const [showGifs, setShowGifs] = useState(false);
+  const [sendingPhoto, setSendingPhoto] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
+  const pickPhoto = async (file: File | null) => {
+    if (!file) return;
+    setSendingPhoto(true);
+    try {
+      const dataUrl = await compressImageFile(file);
+      onSend('', 'image', dataUrl, replyingTo?.id || null);
+      setReplyingTo(null);
+    } catch {
+      // image failed to load/encode — nothing sent, composer stays as-is
+    } finally {
+      setSendingPhoto(false);
+    }
+  };
   const endRef = useRef<HTMLDivElement | null>(null);
   const pressTimer = useRef<any>(null);
 
@@ -699,7 +716,11 @@ function ChatPanel({
               onTouchEnd={() => clearTimeout(pressTimer.current)}
             >
               <div className="flex-shrink-0 pt-0.5" style={grouped ? { visibility: 'hidden', height: 0, overflow: 'hidden' } : undefined}>
-                <AvatarSprite skin={m.avatarSkin} size={28} faceOnly />
+                {m.avatarImage ? (
+                  <img src={m.avatarImage} alt="" className="w-7 h-7 rounded-full object-cover" />
+                ) : (
+                  <AvatarSprite skin={m.avatarSkin} size={28} faceOnly />
+                )}
               </div>
 
               <div className="min-w-0 flex-1">
@@ -731,6 +752,8 @@ function ChatPanel({
                   <p className="text-xs italic" style={{ color: 'var(--muted-foreground)' }}>message deleted</p>
                 ) : m.type === 'gif' ? (
                   <img src={m.gifUrl} alt="" className="rounded-xl mt-1 max-w-[190px]" />
+                ) : m.type === 'image' ? (
+                  <img src={m.imageData} alt="" className="rounded-xl mt-1 max-w-[220px] max-h-[280px] object-cover" />
                 ) : (
                   <p className="text-sm leading-snug break-words">{m.text}</p>
                 )}
@@ -852,6 +875,24 @@ function ChatPanel({
         >
           <Icon.Gif size={18} />
         </button>
+        <button
+          onClick={() => photoInputRef.current?.click()}
+          className="icon-btn w-9 h-9"
+          title="Send a photo"
+          disabled={sendingPhoto}
+        >
+          <Icon.Image size={18} />
+        </button>
+        <input
+          ref={photoInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            pickPhoto(e.target.files?.[0] || null);
+            e.target.value = '';
+          }}
+        />
         <input
           value={draft}
           maxLength={280}

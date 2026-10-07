@@ -98,7 +98,9 @@ def serialize_message(message: Message, user=None, reactions=None):
             "id": str(parent.id),
             "username": parent.author_name,
             "text": "message deleted" if parent.deleted else (
-                parent.text[:80] if parent.kind == "text" else "GIF"
+                parent.text[:80] if parent.kind == "text"
+                else "Photo" if parent.kind == "image"
+                else "GIF"
             ),
             "deleted": parent.deleted,
         }
@@ -107,9 +109,13 @@ def serialize_message(message: Message, user=None, reactions=None):
         "userId": str(message.user_id) if message.user_id else "",
         "username": message.author_name,
         "avatarSkin": message.author_skin % 8,
+        # Looked up live off the user (not a snapshot), so changing your
+        # profile picture updates how your past messages look too.
+        "avatarImage": (message.user.profile_image if message.user_id else "") or "",
         "text": "" if message.deleted else message.text,
         "type": message.kind,
         "gifUrl": "" if message.deleted else message.gif_url,
+        "imageData": "" if message.deleted else message.image_data,
         "timestamp": ms(message.created_at),
         "edited": bool(message.edited_at),
         "deleted": message.deleted,
@@ -218,7 +224,7 @@ def full_room_state(room: Room, user=None, message_limit=60):
     user_id = getattr(user, "id", None)
     messages = list(
         room.messages.order_by("-created_at")
-        .select_related("reply_to")
+        .select_related("reply_to", "user")
         .prefetch_related("reactions")[:message_limit]
     )
     messages.reverse()

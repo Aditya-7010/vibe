@@ -32,6 +32,9 @@ log = logging.getLogger(__name__)
 TICK_SECONDS = 2.5
 CLOCK_PUSH_EVERY = 2  # ticks, so roughly every 5s
 MAX_CHAT_LENGTH = 280
+# Keep in sync with accounts.serializers.MAX_IMAGE_DATA_LENGTH — same idea,
+# applied to a photo sent in chat instead of a profile picture.
+MAX_IMAGE_DATA_LENGTH = 400_000
 
 
 class RoomConsumer(AsyncJsonWebsocketConsumer):
@@ -172,12 +175,23 @@ class RoomConsumer(AsyncJsonWebsocketConsumer):
         )
 
     async def do_chat(self, payload):
-        kind = "gif" if payload.get("gifUrl") else "text"
+        image_data = (payload.get("imageData") or "").strip()
+        if image_data and (
+            not image_data.startswith("data:image/")
+            or len(image_data) > MAX_IMAGE_DATA_LENGTH
+        ):
+            await self.send_json(
+                {"type": "error", "payload": {"detail": "That photo didn't make it — try a smaller one."}}
+            )
+            return
+        kind = "image" if image_data else "gif" if payload.get("gifUrl") else "text"
         text = (payload.get("text") or "").strip()[:MAX_CHAT_LENGTH]
         gif_url = (payload.get("gifUrl") or "").strip()[:600]
         if kind == "text" and not text:
             return
-        message = await self.create_message(kind, text, gif_url, payload.get("replyTo"))
+        message = await self.create_message(
+            kind, text, gif_url, payload.get("replyTo"), image_data=image_data
+        )
         await self.group_broadcast({"type": "chat", "payload": message})
         if kind == "text":
             await self.group_broadcast(
@@ -414,7 +428,7 @@ class RoomConsumer(AsyncJsonWebsocketConsumer):
         return bool(playback and str(playback.dj_id or "") == str(self.user.id))
 
     @database_sync_to_async
-    def create_message(self, kind, text, gif_url, reply_to_id=None):
+    def create_message(self, kind, text, gif_url, reply_to_id=None, image_data=""):
         room = Room.objects.get(pk=self.room_id)
         reply_to = None
         if reply_to_id:
@@ -429,6 +443,7 @@ class RoomConsumer(AsyncJsonWebsocketConsumer):
             kind=kind,
             text=text,
             gif_url=gif_url,
+            image_data=image_data,
             reply_to=reply_to,
         )
         # Keep only the most recent 100 messages per room so history (and the

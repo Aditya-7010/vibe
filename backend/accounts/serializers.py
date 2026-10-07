@@ -8,6 +8,12 @@ from .models import Friendship, User
 
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_.-]{3,20}$")
 
+# profile_image / image_data are base64 data URLs stored straight in the
+# database (see the model comments for why), so this is the one guard
+# against someone posting something huge. The frontend compresses images
+# before sending, so a well-behaved client never comes close to this.
+MAX_IMAGE_DATA_LENGTH = 400_000
+
 
 class UserSerializer(serializers.ModelSerializer):
     avatarSkin = serializers.IntegerField(source="avatar_skin", required=False)
@@ -21,6 +27,9 @@ class UserSerializer(serializers.ModelSerializer):
     )
     bubbleChatEnabled = serializers.BooleanField(
         source="bubble_chat_enabled", required=False
+    )
+    profileImage = serializers.CharField(
+        source="profile_image", required=False, allow_blank=True
     )
     friends = serializers.SerializerMethodField()
 
@@ -37,6 +46,7 @@ class UserSerializer(serializers.ModelSerializer):
             "fontSize",
             "animationsEnabled",
             "bubbleChatEnabled",
+            "profileImage",
             "emailVerified",
             "pendingEmail",
             "friends",
@@ -45,6 +55,13 @@ class UserSerializer(serializers.ModelSerializer):
 
     def get_friends(self, obj):
         return [str(f.friend_id) for f in obj.friendships.all()]
+
+    def validate_profileImage(self, value):
+        if value and not value.startswith("data:image/"):
+            raise serializers.ValidationError("Expected an image data URL.")
+        if len(value) > MAX_IMAGE_DATA_LENGTH:
+            raise serializers.ValidationError("Image is too large.")
+        return value
 
     def validate_username(self, value):
         value = value.strip()
@@ -171,11 +188,12 @@ class DeleteAccountSerializer(serializers.Serializer):
 
 class PublicUserSerializer(serializers.ModelSerializer):
     avatarSkin = serializers.IntegerField(source="avatar_skin")
+    profileImage = serializers.CharField(source="profile_image", read_only=True)
     isFriend = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ["id", "username", "avatarSkin", "isFriend"]
+        fields = ["id", "username", "avatarSkin", "profileImage", "isFriend"]
 
     def get_isFriend(self, obj):
         request = self.context.get("request")

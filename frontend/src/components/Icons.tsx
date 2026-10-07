@@ -78,6 +78,14 @@ export const Logo = ({ size = 28 }: { size?: number }) => (
 /* Navigation & chrome                                               */
 /* ---------------------------------------------------------------- */
 
+export const Image = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <circle cx="8.5" cy="8.5" r="1.5" />
+    <path d="m21 15-5-5L5 21" />
+  </Svg>
+);
+
 export const ArrowLeft = (p: IconProps) => (
   <Svg {...p}><path d="M19 12H5" /><path d="m12 19-7-7 7-7" /></Svg>
 );
