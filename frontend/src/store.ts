@@ -148,6 +148,7 @@ interface AppState {
   reorderQueue: (fromId: string, toId: string) => void;
   playNext: () => void;
   syncPlayback: () => void;
+  reportDuration: (itemId: string, duration: number) => void;
   getPlaybackPosition: () => number;
 
   joinLine: () => void;
@@ -621,6 +622,10 @@ export const useStore = create<AppState>((set, get) => {
     },
     syncPlayback: () => {
       get().socket?.send('sync', {});
+    },
+    reportDuration: (itemId, duration) => {
+      if (!itemId || !duration) return;
+      get().socket?.send('queue_duration', { id: itemId, duration });
     },
 
     /**

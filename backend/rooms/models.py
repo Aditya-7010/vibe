@@ -364,8 +364,16 @@ class Playback(models.Model):
             self.advance(live_ids=live_ids)
             changed = True
         elif self.is_playing:
-            duration = self.item.duration or 0
-            if duration and self.position() >= duration:
+            duration = (self.item.duration if self.item else 0) or 0
+            elapsed = self.position()
+            if duration and elapsed >= duration:
+                # Normal case: song reached its stored duration.
+                self.advance(live_ids=live_ids)
+                changed = True
+            elif not duration and elapsed >= 1800:
+                # Safety net: no duration was ever stored (e.g. added via YT
+                # link before the browser could report it back). Cap at 30 min
+                # so the room doesn't stay stuck on one track indefinitely.
                 self.advance(live_ids=live_ids)
                 changed = True
 

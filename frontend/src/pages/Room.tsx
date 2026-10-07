@@ -102,6 +102,7 @@ export default function Room() {
     playNext,
     syncPlayback,
     getPlaybackPosition,
+    reportDuration,
     roomAvatars,
     bubbleMessages,
     bubblesEnabled,
@@ -196,7 +197,15 @@ export default function Room() {
                 e.data === window.YT?.PlayerState?.CUED) {
               try {
                 const d = player.getDuration?.();
-                if (d && d > 0) setYtDuration(d);
+                if (d && d > 0) {
+                  setYtDuration(d);
+                  // If the DB duration is 0, report the real value back so
+                  // the server can advance the queue correctly when the song ends.
+                  const song = useStore.getState().playback.current;
+                  if (song && !song.duration) {
+                    useStore.getState().reportDuration(song.id, Math.round(d));
+                  }
+                }
               } catch { /* ignore */ }
             }
             // Video ended (state === 0) — do nothing, let the server tick

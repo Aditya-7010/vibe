@@ -245,6 +245,25 @@ class RoomConsumer(AsyncJsonWebsocketConsumer):
         await self.reorder_queue(order)
         await self.group_broadcast({"type": "queue", "payload": await self.get_queue()})
 
+    async def do_queue_duration(self, payload):
+        """
+        The browser-side YT player is the only one that can reliably read the
+        real video duration (e.g. for URLs added without an API key). When it
+        does, it sends this message so we can patch the QueueItem in the DB
+        and let `ensure_current` advance the queue at the right moment.
+        Only accepted when the item is the one currently playing.
+        """
+        item_id = payload.get("id")
+        duration = int(payload.get("duration") or 0)
+        if not item_id or duration <= 0:
+            return
+        updated = await self.patch_item_duration(item_id, duration)
+        if updated:
+            # Broadcast updated queue and playback so everyone sees the duration.
+            await self.group_broadcast({"type": "queue", "payload": await self.get_queue()})
+            _, playback = await self.advance_playback()
+            await self.group_broadcast({"type": "playback", "payload": playback})
+
     async def do_playback_skip(self, payload):
         """Skip the current track — the room owner/admins, or whoever's track
         is currently playing, only. Everyone else gets an error, not a skip."""
@@ -572,6 +591,22 @@ class RoomConsumer(AsyncJsonWebsocketConsumer):
                 item.position = position
                 item.save(update_fields=["position"])
                 position += 1
+
+    @database_sync_to_async
+    def patch_item_duration(self, item_id, duration):
+        """
+        Update the duration of a QueueItem — only accepted for the item that
+        is currently playing and only when the stored duration is still 0.
+        Returns True when the record was actually changed.
+        """
+        room = Room.objects.get(pk=self.room_id)
+        playback = get_playback(room)
+        if str(playback.item_id or "") != str(item_id):
+            return False  # only the current track can be patched
+        updated = QueueItem.objects.filter(
+            pk=item_id, duration=0
+        ).update(duration=duration)
+        return updated > 0
 
     @database_sync_to_async
     def get_djs(self):
