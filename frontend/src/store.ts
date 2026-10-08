@@ -117,6 +117,7 @@ interface AppState {
 
   loadRooms: (params?: { q?: string }) => Promise<void>;
   createRoom: (name: string, description: string) => Promise<Room>;
+  updateRoom: (roomId: string, data: Record<string, any>) => Promise<void>;
   deleteRoom: (roomId: string) => Promise<void>;
   toggleFavoriteRoom: (roomId: string) => Promise<void>;
 
@@ -266,6 +267,13 @@ export const useStore = create<AppState>((set, get) => {
             return { bubbleMessages: next };
           });
         }, BUBBLE_MS);
+        break;
+      }
+      case 'room_update': {
+        set((s) => ({
+          currentRoom: s.currentRoom?.id === event.payload.id ? { ...s.currentRoom, ...event.payload } : s.currentRoom,
+          rooms: s.rooms.map((r) => (r.id === event.payload.id ? { ...r, ...event.payload } : r)),
+        }));
         break;
       }
       case 'queue': {
@@ -472,6 +480,15 @@ export const useStore = create<AppState>((set, get) => {
       const room: Room = await roomsApi.create(name, description);
       set((s) => ({ rooms: [room, ...s.rooms] }));
       return room;
+    },
+
+    updateRoom: async (roomId, data) => {
+      const room = await roomsApi.update(roomId, data);
+      set((s) => ({
+        currentRoom: s.currentRoom?.id === roomId ? { ...s.currentRoom, ...room } : s.currentRoom,
+        rooms: s.rooms.map((r) => (r.id === roomId ? { ...r, ...room } : r)),
+      }));
+      get().socket?.send('room_update', data);
     },
 
     deleteRoom: async (roomId) => {

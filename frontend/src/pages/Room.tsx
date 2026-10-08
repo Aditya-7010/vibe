@@ -120,6 +120,7 @@ export default function Room() {
     loadFavorites,
     addFavoriteToQueue,
     removeFavorite,
+    updateRoom,
   } = useStore();
 
   const currentSong = playback.current;
@@ -127,6 +128,8 @@ export default function Room() {
   const canModerate = !!currentRoom?.canModerate;
   const inLine = djs.some((d) => d.id === user?.id);
   const myTurn = playback.djId && playback.djId === user?.id;
+  const isMyTrack = !!(myTurn || (currentSong?.addedById && currentSong.addedById === user?.id));
+  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     if (!favoritesLoaded) loadFavorites();
@@ -314,6 +317,50 @@ export default function Room() {
   const duration = currentSong?.duration || ytDuration || 0;
   const progress = duration ? Math.min(100, (position / duration) * 100) : 0;
 
+  /**
+   * Resync playback immediately. When switching tabs on phones, the mobile
+   * browser automatically pauses the YT iframe. Calling playVideo() inside this
+   * user gesture handler unpauses it and restores synchronized audio.
+   */
+  const handleResync = useCallback(() => {
+    syncPlayback();
+    const player = playerRef.current;
+    if (player) {
+      try {
+        const target = Math.max(0, getPlaybackPosition());
+        player.seekTo?.(target, true);
+        player.playVideo?.();
+        if (!useStore.getState().isMuted) {
+          player.unMute?.();
+          player.setVolume?.(85);
+        }
+      } catch {
+        /* player still initializing */
+      }
+    }
+  }, [syncPlayback, getPlaybackPosition]);
+
+  // When returning from background tab on mobile/desktop, auto-request sync and attempt play
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        syncPlayback();
+        const player = playerRef.current;
+        if (player && currentSong) {
+          try {
+            const target = Math.max(0, getPlaybackPosition());
+            player.seekTo?.(target, true);
+            player.playVideo?.();
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, [syncPlayback, getPlaybackPosition, currentSong]);
+
   /* ---------------------------------------------------------------- */
   /* Panels                                                            */
   /* ---------------------------------------------------------------- */
@@ -353,11 +400,20 @@ export default function Room() {
           </p>
         </div>
 
+        {canModerate && (
+          <button
+            onClick={() => setShowSettings(true)}
+            className="icon-btn w-9 h-9"
+            title="Room Background / Settings"
+          >
+            <Icon.Image size={17} />
+          </button>
+        )}
         <button
-          onClick={() => { syncPlayback(); playerRef.current?.seekTo(getPlaybackPosition(), true); }}
+          onClick={handleResync}
           className="icon-btn w-9 h-9"
-          title={`Re-sync${Math.abs(drift) > DRIFT_TOLERANCE ? ' (out of step)' : ''}`}
-          style={Math.abs(drift) > DRIFT_TOLERANCE ? { color: '#fbbf24' } : undefined}
+          title={`Re-sync${Math.abs(drift) > DRIFT_TOLERANCE ? ' (tap to sync/play)' : ''}`}
+          style={Math.abs(drift) > DRIFT_TOLERANCE ? { color: '#fbbf24', borderColor: '#fbbf24' } : undefined}
         >
           <Icon.Sync size={17} />
         </button>
@@ -374,6 +430,17 @@ export default function Room() {
           }`}
           style={isMobile && panel ? { height: '38vh' } : undefined}
         >
+          {/* Custom Room Background image / GIF */}
+          {currentRoom?.backgroundUrl && (
+            <div
+              className="absolute inset-0 pointer-events-none z-0 bg-cover bg-center transition-all duration-700"
+              style={{
+                backgroundImage: `url(${currentRoom.backgroundUrl})`,
+              }}
+            >
+              <div className="absolute inset-0 bg-black/45 backdrop-blur-[0.5px]" />
+            </div>
+          )}
           <div className="relative z-10 flex-1 flex flex-col items-center justify-center gap-6 px-4 py-6 overflow-y-auto">
             {/* Player — sized to the video, not stretched across the room. */}
             <div className="w-full flex flex-col items-center gap-3">
@@ -505,32 +572,43 @@ export default function Room() {
 
       {/* ---------------- bottom bar ---------------- */}
       <footer className="bottom-bar flex items-center justify-center gap-1.5 sm:gap-3 px-3 py-2.5 flex-shrink-0">
-        {/* Feedback buttons are hidden for the current DJ — you can't react to your own song. */}
-        {!myTurn && (
-          <>
-            <BarBtn
-              Glyph={Icon.Heart}
-              label="Like"
-              count={songFeedbackCounts.like}
-              active={!!currentSong && myReaction === 'like'}
-              onClick={() => toggleSongFeedback('like')}
-            />
-            <BarBtn
-              Glyph={Icon.ThumbDown}
-              label="Dislike"
-              count={songFeedbackCounts.dislike}
-              active={!!currentSong && myReaction === 'dislike'}
-              onClick={() => toggleSongFeedback('dislike')}
-            />
-            <BarBtn
-              Glyph={Icon.Bookmark}
-              label="Save"
-              count={songFeedbackCounts.save}
-              active={!!currentSong && mySaved}
-              onClick={() => toggleSongFeedback('save')}
-            />
-          </>
-        )}
+        {/* Feedback buttons are disabled rather than hidden when your own song is playing. */}
+        <BarBtn
+          Glyph={Icon.Heart}
+          label="Like"
+          count={songFeedbackCounts.like}
+          active={!!currentSong && myReaction === 'like'}
+          disabled={!currentSong || isMyTrack}
+          title={isMyTrack ? "You can't like your own track" : !currentSong ? "No track playing" : "Like"}
+          onClick={() => {
+            if (!currentSong || isMyTrack) return;
+            toggleSongFeedback('like');
+          }}
+        />
+        <BarBtn
+          Glyph={Icon.ThumbDown}
+          label="Dislike"
+          count={songFeedbackCounts.dislike}
+          active={!!currentSong && myReaction === 'dislike'}
+          disabled={!currentSong || isMyTrack}
+          title={isMyTrack ? "You can't dislike your own track" : !currentSong ? "No track playing" : "Dislike"}
+          onClick={() => {
+            if (!currentSong || isMyTrack) return;
+            toggleSongFeedback('dislike');
+          }}
+        />
+        <BarBtn
+          Glyph={Icon.Bookmark}
+          label="Save"
+          count={songFeedbackCounts.save}
+          active={!!currentSong && mySaved}
+          disabled={!currentSong || isMyTrack}
+          title={isMyTrack ? "You can't save your own track" : !currentSong ? "No track playing" : "Save"}
+          onClick={() => {
+            if (!currentSong || isMyTrack) return;
+            toggleSongFeedback('save');
+          }}
+        />
         <div className="w-px h-7 mx-1" style={{ background: 'var(--border)' }} />
         <BarBtn Glyph={Icon.Chat} label="Chat" active={chatOpen} onClick={toggleChat} />
         <BarBtn
@@ -549,6 +627,197 @@ export default function Room() {
           <Icon.Exit size={16} /> <span className="hidden sm:inline">Leave</span>
         </button>
       </footer>
+
+      {showSettings && currentRoom && (
+        <RoomSettingsModal
+          room={currentRoom}
+          onClose={() => setShowSettings(false)}
+          onSave={async (data) => {
+            await updateRoom(currentRoom.id, data);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ================================================================== */
+/* Room Settings / Background customizer                              */
+/* ================================================================== */
+
+function RoomSettingsModal({
+  room,
+  onClose,
+  onSave,
+}: {
+  room: any;
+  onClose: () => void;
+  onSave: (data: { backgroundUrl: string }) => Promise<void>;
+}) {
+  const [bgUrl, setBgUrl] = useState(room.backgroundUrl || '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const presets = [
+    { name: '🌆 Cyber City', url: 'https://media.giphy.com/media/26tn3334vHJwdAnCw/giphy.gif' },
+    { name: '🌧️ Lofi Rain', url: 'https://media.giphy.com/media/L3ERvA6jWCd0qO4NdX/giphy.gif' },
+    { name: '🌅 Synth Sunset', url: 'https://media.giphy.com/media/3oKIPnAiaMCws8nOsE/giphy.gif' },
+    { name: '☕ Anime Cafe', url: 'https://media.giphy.com/media/3o7btQ8jDTPGDpgc6I/giphy.gif' },
+    { name: '📻 Retro Vinyl', url: 'https://media.giphy.com/media/3o7aCSPqXE5C6T8tBC/giphy.gif' },
+    { name: '✨ Neon Stars', url: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=1200&q=80' },
+  ];
+
+  const handleFileUpload = (file: File | null) => {
+    if (!file) return;
+    if (file.size > 2_000_000) {
+      setError('Image/GIF must be under 2MB.');
+      return;
+    }
+    setError('');
+    const reader = new FileReader();
+    reader.onload = () => {
+      setBgUrl(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError('');
+    try {
+      await onSave({ backgroundUrl: bgUrl });
+      onClose();
+    } catch (err: any) {
+      setError(err?.message || 'Failed to save background');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+      <div
+        className="w-full max-w-lg rounded-2xl p-6 shadow-2xl flex flex-col gap-4 max-h-[90vh] overflow-y-auto"
+        style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span style={{ color: 'var(--primary)' }}><Icon.Image size={20} /></span>
+            <h2 className="text-base font-bold" style={{ fontFamily: 'var(--font-head)' }}>
+              Room Background
+            </h2>
+          </div>
+          <button onClick={onClose} className="icon-btn w-8 h-8" aria-label="Close">
+            <Icon.Close size={16} />
+          </button>
+        </div>
+
+        <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+          Set a unique background image or animated GIF for this room. Each room maintains its own separate backdrop.
+        </p>
+
+        {/* Live Preview */}
+        <div
+          className="w-full h-36 rounded-xl overflow-hidden relative flex items-center justify-center border"
+          style={{
+            borderColor: 'var(--border)',
+            background: bgUrl ? `url(${bgUrl}) center / cover no-repeat` : 'var(--secondary)',
+          }}
+        >
+          {bgUrl && <div className="absolute inset-0 bg-black/35 backdrop-blur-[0.5px]" />}
+          <div className="relative z-10 flex flex-col items-center gap-1 text-center px-4">
+            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-black/60 text-white backdrop-blur-md">
+              {bgUrl ? 'Preview: Custom Backdrop Active' : 'Default Theme Gradient'}
+            </span>
+          </div>
+        </div>
+
+        {error && <p className="text-xs text-red-400 font-semibold">{error}</p>}
+
+        {/* URL Input */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-semibold">Image or GIF URL</label>
+          <div className="flex gap-2">
+            <input
+              value={bgUrl}
+              onChange={(e) => { setBgUrl(e.target.value); setError(''); }}
+              placeholder="https://example.com/backdrop.gif or image URL…"
+              className="input-field flex-1 px-3 py-2 rounded-xl text-xs"
+            />
+            {bgUrl && (
+              <button
+                type="button"
+                onClick={() => setBgUrl('')}
+                className="btn-ghost px-2.5 py-2 rounded-xl text-xs"
+                title="Reset to default theme gradient"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Presets */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-semibold" style={{ color: 'var(--muted-foreground)' }}>
+            Aesthetic Presets
+          </label>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {presets.map((p) => (
+              <button
+                key={p.name}
+                type="button"
+                onClick={() => setBgUrl(p.url)}
+                className={`flex items-center gap-1.5 p-2 rounded-xl text-xs font-medium border text-left transition-all ${
+                  bgUrl === p.url ? 'border-primary bg-primary/10' : 'border-border bg-secondary/60 hover:bg-secondary'
+                }`}
+              >
+                <img src={p.url} alt="" className="w-6 h-6 rounded object-cover flex-shrink-0" />
+                <span className="truncate">{p.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Upload File */}
+        <div className="flex items-center gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,.gif"
+            className="hidden"
+            onChange={(e) => handleFileUpload(e.target.files?.[0] || null)}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="btn-ghost px-3 py-2 rounded-xl text-xs flex items-center gap-1.5"
+          >
+            <Icon.Plus size={14} /> Upload image or GIF from device
+          </button>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center justify-end gap-2 pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
+          <button
+            type="button"
+            onClick={onClose}
+            className="btn-ghost px-4 py-2 rounded-xl text-xs"
+            disabled={saving}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            className="btn-primary px-5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5"
+            disabled={saving}
+          >
+            {saving ? 'Saving…' : <><Icon.Check size={14} /> Save Background</>}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1120,15 +1389,32 @@ function QueuePanel({
   onRemoveFavorite: (videoId: string) => void;
 }) {
   const [tab, setTab] = useState<'queue' | 'dj' | 'favorites'>('queue');
+  const [queueSubView, setQueueSubView] = useState<'myQueue' | 'results'>('myQueue');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
+  const [addedNotice, setAddedNotice] = useState<string | null>(null);
   const dragItem = useRef<string | null>(null);
   const dragDj = useRef<number | null>(null);
 
   /* Helper: does this string look like a YouTube URL or bare video ID? */
   const isYouTubeUrl = (s: string) =>
     /youtu\.be\/|youtube\.com\/|^[A-Za-z0-9_-]{11}$/.test(s);
+
+  // Automatically switch to search results when typing
+  useEffect(() => {
+    if (query.trim().length >= 2) {
+      setQueueSubView('results');
+    }
+  }, [query]);
+
+  const handleAddTrack = (r: SearchResult) => {
+    onAdd({ videoId: r.videoId, title: r.title, thumbnail: r.thumbnail, duration: r.duration });
+    setAddedNotice(r.videoId);
+    setTimeout(() => {
+      setAddedNotice((prev) => (prev === r.videoId ? null : prev));
+    }, 1500);
+  };
 
   /* Search fires as you type — no enter key needed.
      If the input looks like a YouTube link, we do a direct lookup
@@ -1309,114 +1595,207 @@ function QueuePanel({
           </section>
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto min-h-0">
-          {/* ---- Up next (your own tracks only) ---- */}
-          <section className="px-3 pt-3 pb-3">
-            <h3 className="text-xs font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--muted-foreground)' }}>
-              Your queue · {myQueue.length}
-            </h3>
-
-            {myQueue.length === 0 && (
-              <p className="text-xs py-3" style={{ color: 'var(--muted-foreground)' }}>
-                Nothing queued. Search below and add something.
-              </p>
-            )}
-
-            <div className="flex flex-col gap-1.5">
-              {myQueue.map((item, index) => (
-                <div
-                  key={item.id}
-                  className="flex items-center gap-2 p-2 rounded-xl"
-                  style={{ background: 'var(--secondary)', border: '1px solid var(--border)' }}
-                  draggable
-                  onDragStart={() => { dragItem.current = item.id; }}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={() => {
-                    if (dragItem.current !== null && dragItem.current !== item.id) onReorder(dragItem.current, item.id);
-                    dragItem.current = null;
-                  }}
+        <div className="flex-1 flex flex-col min-h-0">
+          {/* ---- Sticky Search + Switcher at Top of Queue ---- */}
+          <div className="px-3 pt-2.5 pb-2.5 border-b flex-shrink-0" style={{ borderColor: 'var(--border)' }}>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted-foreground)' }}>
+                <Icon.Search size={15} />
+              </span>
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search YouTube or paste a link…"
+                className="input-field w-full pl-9 pr-8 py-2 rounded-xl text-xs"
+              />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => { setQuery(''); setQueueSubView('myQueue'); }}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs opacity-60 hover:opacity-100 p-0.5"
+                  aria-label="Clear search"
                 >
-                  <span className="queue-drag-handle" style={{ color: 'var(--muted-foreground)' }}>
-                    <Icon.Grip size={14} />
-                  </span>
-                  <img src={item.thumbnail} alt="" className="w-12 h-9 rounded object-cover flex-shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold truncate">{item.title}</p>
-                    <p className="text-[10px] truncate" style={{ color: 'var(--muted-foreground)' }}>
-                      {item.durationText}
+                  <Icon.Close size={13} />
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5 mt-2">
+              <button
+                type="button"
+                onClick={() => setQueueSubView('myQueue')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                  queueSubView === 'myQueue' ? 'bg-primary text-primary-foreground shadow-sm' : 'btn-ghost'
+                }`}
+              >
+                <span>Your Queue</span>
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-white/20">
+                  {myTracks}
+                </span>
+              </button>
+
+              {(results.length > 0 || searching || query.trim().length > 0) && (
+                <button
+                  type="button"
+                  onClick={() => setQueueSubView('results')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                    queueSubView === 'results' ? 'bg-primary text-primary-foreground shadow-sm' : 'btn-ghost'
+                  }`}
+                >
+                  <span>Results</span>
+                  {results.length > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-white/20">
+                      {results.length}
+                    </span>
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto min-h-0">
+            {queueSubView === 'results' ? (
+              /* ---- Search results (Instant & prominent on mobile!) ---- */
+              <section className="px-3 pt-3 pb-3">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--muted-foreground)' }}>
+                    {searching ? 'Searching…' : `Results · ${results.length}`}
+                  </h3>
+                  {results.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setQueueSubView('myQueue')}
+                      className="text-xs font-semibold hover:underline"
+                      style={{ color: 'var(--primary)' }}
+                    >
+                      View Queue ({myTracks}) →
+                    </button>
+                  )}
+                </div>
+
+                {searching && results.length === 0 && (
+                  <div className="py-8 text-center text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                    <Icon.Sync size={18} className="mx-auto mb-2 animate-spin" />
+                    Searching YouTube…
+                  </div>
+                )}
+
+                {!searching && results.length === 0 && (
+                  <p className="text-xs py-6 text-center" style={{ color: 'var(--muted-foreground)' }}>
+                    {query.trim() ? 'No results found.' : 'Type above to search YouTube.'}
+                  </p>
+                )}
+
+                <div className="flex flex-col gap-1.5">
+                  {results.map((r) => {
+                    const isAdded = addedNotice === r.videoId;
+                    return (
+                      <div
+                        key={r.videoId}
+                        className="flex items-center gap-2 p-2 rounded-xl"
+                        style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+                      >
+                        <img src={r.thumbnail} alt="" className="w-12 h-9 rounded object-cover flex-shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold truncate">{r.title}</p>
+                          <p className="text-[10px] truncate" style={{ color: 'var(--muted-foreground)' }}>
+                            {r.author} · {r.durationText}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleAddTrack(r)}
+                          className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
+                            isAdded ? 'bg-green-600 text-white' : 'btn-primary'
+                          }`}
+                          aria-label={`Add ${r.title}`}
+                          title="Add to queue"
+                        >
+                          {isAdded ? <Icon.Check size={16} /> : <Icon.Plus size={15} />}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : (
+              /* ---- Up next (your own tracks) ---- */
+              <section className="px-3 pt-3 pb-3">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--muted-foreground)' }}>
+                    Your queue · {myQueue.length}
+                  </h3>
+                  {results.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setQueueSubView('results')}
+                      className="text-xs font-semibold hover:underline"
+                      style={{ color: 'var(--primary)' }}
+                    >
+                      ← Back to Results ({results.length})
+                    </button>
+                  )}
+                </div>
+
+                {myQueue.length === 0 && (
+                  <div className="py-6 text-center">
+                    <p className="text-xs mb-2" style={{ color: 'var(--muted-foreground)' }}>
+                      Nothing queued yet.
+                    </p>
+                    <p className="text-[11px]" style={{ color: 'var(--muted-foreground)' }}>
+                      Search above or paste a YouTube link to add songs to the line.
                     </p>
                   </div>
-                  <div className="flex flex-col">
-                    <button
-                      onClick={() => index > 0 && onReorder(item.id, myQueue[index - 1].id)}
-                      className="icon-btn w-6 h-5"
-                      aria-label="Move up"
-                    >
-                      <Icon.ChevronUp size={13} />
-                    </button>
-                    <button
-                      onClick={() => index < myQueue.length - 1 && onReorder(item.id, myQueue[index + 1].id)}
-                      className="icon-btn w-6 h-5"
-                      aria-label="Move down"
-                    >
-                      <Icon.ChevronDown size={13} />
-                    </button>
-                  </div>
-                  <button onClick={() => onRemove(item.id)} className="icon-btn w-7 h-7" style={{ color: '#f87171' }} aria-label="Remove from queue">
-                    <Icon.Trash size={14} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </section>
+                )}
 
-          {/* ---- Search results ---- */}
-          {(results.length > 0 || searching) && (
-            <section className="px-3 pb-3">
-              <h3 className="text-xs font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--muted-foreground)' }}>
-                {searching ? 'Searching…' : 'Results'}
-              </h3>
-              <div className="flex flex-col gap-1.5">
-                {results.map((r) => (
-                  <div
-                    key={r.videoId}
-                    className="flex items-center gap-2 p-2 rounded-xl"
-                    style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
-                  >
-                    <img src={r.thumbnail} alt="" className="w-12 h-9 rounded object-cover flex-shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-semibold truncate">{r.title}</p>
-                      <p className="text-[10px] truncate" style={{ color: 'var(--muted-foreground)' }}>
-                        {r.author} · {r.durationText}
-                      </p>
+                <div className="flex flex-col gap-1.5">
+                  {myQueue.map((item, index) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center gap-2 p-2 rounded-xl"
+                      style={{ background: 'var(--secondary)', border: '1px solid var(--border)' }}
+                      draggable
+                      onDragStart={() => { dragItem.current = item.id; }}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={() => {
+                        if (dragItem.current !== null && dragItem.current !== item.id) onReorder(dragItem.current, item.id);
+                        dragItem.current = null;
+                      }}
+                    >
+                      <span className="queue-drag-handle" style={{ color: 'var(--muted-foreground)' }}>
+                        <Icon.Grip size={14} />
+                      </span>
+                      <img src={item.thumbnail} alt="" className="w-12 h-9 rounded object-cover flex-shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold truncate">{item.title}</p>
+                        <p className="text-[10px] truncate" style={{ color: 'var(--muted-foreground)' }}>
+                          {item.durationText}
+                        </p>
+                      </div>
+                      <div className="flex flex-col">
+                        <button
+                          onClick={() => index > 0 && onReorder(item.id, myQueue[index - 1].id)}
+                          className="icon-btn w-6 h-5"
+                          aria-label="Move up"
+                        >
+                          <Icon.ChevronUp size={13} />
+                        </button>
+                        <button
+                          onClick={() => index < myQueue.length - 1 && onReorder(item.id, myQueue[index + 1].id)}
+                          className="icon-btn w-6 h-5"
+                          aria-label="Move down"
+                        >
+                          <Icon.ChevronDown size={13} />
+                        </button>
+                      </div>
+                      <button onClick={() => onRemove(item.id)} className="icon-btn w-7 h-7" style={{ color: '#f87171' }} aria-label="Remove from queue">
+                        <Icon.Trash size={14} />
+                      </button>
                     </div>
-                    <button
-                      onClick={() => onAdd({ videoId: r.videoId, title: r.title, thumbnail: r.thumbnail, duration: r.duration })}
-                      className="btn-primary w-8 h-8 rounded-lg"
-                      aria-label={`Add ${r.title}`}
-                    >
-                      <Icon.Plus size={15} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-        </div>
-      )}
-
-      {tab === 'queue' && (
-        <div className="border-t p-3 flex-shrink-0" style={{ borderColor: 'var(--border)' }}>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--muted-foreground)' }}>
-              <Icon.Search size={15} />
-            </span>
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search YouTube or paste a link…"
-              className="input-field w-full pl-9 pr-3 py-2.5 rounded-xl text-sm"
-            />
+                  ))}
+                </div>
+              </section>
+            )}
           </div>
         </div>
       )}
@@ -1445,6 +1824,8 @@ function BarBtn({
   label,
   onClick,
   active,
+  disabled,
+  title,
   badge,
   count,
 }: {
@@ -1452,15 +1833,20 @@ function BarBtn({
   label: string;
   onClick: () => void;
   active?: boolean;
+  disabled?: boolean;
+  title?: string;
   badge?: string;
   count?: number;
 }) {
   return (
     <button
-      onClick={onClick}
-      className={`btn-ghost px-3 py-2 rounded-xl text-xs font-semibold relative ${active ? 'is-active' : ''}`}
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      className={`btn-ghost px-3 py-2 rounded-xl text-xs font-semibold relative ${active ? 'is-active' : ''} ${
+        disabled ? 'opacity-40 cursor-not-allowed pointer-events-auto' : ''
+      }`}
       style={active ? { color: 'var(--primary)', borderColor: 'var(--primary)' } : undefined}
-      title={label}
+      title={title || label}
     >
       <Glyph size={16} filled={!!active && (label === 'Like' || label === 'Save')} />
       <span className="hidden sm:inline">{label}</span>

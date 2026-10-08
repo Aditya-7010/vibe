@@ -151,6 +151,8 @@ export const roomsApi = {
   create: (name: string, description: string) =>
     api.post('/rooms/', { name, description }),
   detail: (roomId: string) => api.get(`/rooms/${roomId}/`),
+  update: (roomId: string, data: Record<string, any>) =>
+    api.patch(`/rooms/${roomId}/`, data),
   remove: (roomId: string) => api.del(`/rooms/${roomId}/`),
   favorite: (roomId: string) => api.post(`/rooms/${roomId}/favorite/`),
   queue: (roomId: string) => api.get(`/rooms/${roomId}/queue/`),

@@ -26,6 +26,7 @@ export interface Room {
   slug: string;
   description: string;
   artUrl: string;
+  backgroundUrl?: string;
   isActive: boolean;
   memberCount: number;
   ownerId: string;
