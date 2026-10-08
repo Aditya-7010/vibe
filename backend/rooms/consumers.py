@@ -282,6 +282,18 @@ class RoomConsumer(AsyncJsonWebsocketConsumer):
         await self.group_broadcast({"type": "queue", "payload": await self.get_queue()})
         await self.group_broadcast({"type": "djs", "payload": await self.get_djs()})
 
+    async def do_room_update(self, payload):
+        """Update room background image/GIF or settings — owner/moderators only."""
+        if not await self.is_moderator():
+            await self.send_json(
+                {"type": "error", "payload": {"detail": "Only the room owner can customize this room."}}
+            )
+            return
+        data = await self.update_room_details(payload)
+        if data:
+            await self.group_broadcast({"type": "room_update", "payload": data})
+
+
     # -- DJ line ------------------------------------------------------------
     async def do_dj_join(self, payload):
         await self.join_line()
@@ -378,6 +390,27 @@ class RoomConsumer(AsyncJsonWebsocketConsumer):
     def get_state(self):
         room = Room.objects.select_related("owner").get(pk=self.room_id)
         return full_room_state(room, self.user)
+
+    @database_sync_to_async
+    def update_room_details(self, payload):
+        room = Room.objects.select_related("owner").filter(pk=self.room_id).first()
+        if not room:
+            return None
+        changed = False
+        if "backgroundUrl" in payload:
+            room.background_url = (payload.get("backgroundUrl") or "").strip()
+            changed = True
+        if "description" in payload:
+            room.description = (payload.get("description") or "").strip()[:280]
+            changed = True
+        if "name" in payload and payload["name"]:
+            name = " ".join(payload["name"].split())
+            if len(name) >= 3 and not Room.objects.filter(name__iexact=name).exclude(pk=room.pk).exists():
+                room.name = name
+                changed = True
+        if changed:
+            room.save()
+        return serialize_room(room, self.user)
 
     @database_sync_to_async
     def get_queue(self):

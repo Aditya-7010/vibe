@@ -7,10 +7,13 @@ class RoomWriteSerializer(serializers.ModelSerializer):
     artUrl = serializers.CharField(
         source="art_url", required=False, allow_blank=True, max_length=500
     )
+    backgroundUrl = serializers.CharField(
+        source="background_url", required=False, allow_blank=True, max_length=2_000_000
+    )
 
     class Meta:
         model = Room
-        fields = ["name", "description", "artUrl"]
+        fields = ["name", "description", "artUrl", "backgroundUrl"]
 
     def validate_name(self, value):
         value = " ".join(value.split())

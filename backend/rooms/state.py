@@ -62,6 +62,7 @@ def serialize_room(room: Room, user=None, member_count=None):
         "slug": room.slug,
         "description": room.description,
         "artUrl": room.art_url or default_room_art(room.name, room.slug),
+        "backgroundUrl": room.background_url or "",
         "isActive": count > 0,
         "memberCount": count,
         "ownerId": str(room.owner_id) if room.owner_id else "",

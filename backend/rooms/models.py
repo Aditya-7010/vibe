@@ -16,6 +16,7 @@ class Room(models.Model):
     slug = models.SlugField(max_length=80, unique=True, blank=True)
     description = models.TextField(max_length=280, blank=True, default="")
     art_url = models.URLField(max_length=500, blank=True, default="")
+    background_url = models.TextField(blank=True, default="")
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

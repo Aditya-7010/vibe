@@ -103,7 +103,23 @@ class RoomDetailView(APIView):
         serializer = RoomWriteSerializer(room, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        return Response(serialize_room(room, request.user))
+        data = serialize_room(room, request.user)
+        try:
+            from asgiref.sync import async_to_sync
+            from channels.layers import get_channel_layer
+
+            channel_layer = get_channel_layer()
+            if channel_layer:
+                async_to_sync(channel_layer.group_send)(
+                    f"room_{room.id}",
+                    {
+                        "type": "room.event",
+                        "message": {"type": "room_update", "payload": data},
+                    },
+                )
+        except Exception:
+            pass
+        return Response(data)
 
     def delete(self, request, room_id):
         room = self.get_room(room_id)
